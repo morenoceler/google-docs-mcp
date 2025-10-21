@@ -991,6 +991,7 @@ server.addTool({
       
       const response = await drive.comments.create({
         fileId: args.documentId,
+        fields: 'id,content,quotedFileContent,author,createdTime,resolved',
         requestBody: {
           content: args.commentText,
           quotedFileContent: {
