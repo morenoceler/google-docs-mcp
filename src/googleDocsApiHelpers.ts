@@ -47,6 +47,66 @@ return {}; // Nothing to do
 
 }
 
+// --- Batch Update with Automatic Splitting ---
+/**
+ * Executes batch updates with automatic splitting for large request arrays.
+ * Separates insert and format operations, executing inserts first.
+ *
+ * @param docs - The Google Docs client
+ * @param documentId - The document ID
+ * @param requests - Array of requests to execute
+ * @param log - Optional logger for progress tracking
+ */
+export async function executeBatchUpdateWithSplitting(
+    docs: Docs,
+    documentId: string,
+    requests: docs_v1.Schema$Request[],
+    log?: { info: (msg: string) => void }
+): Promise<void> {
+    if (!requests || requests.length === 0) {
+        return;
+    }
+
+    const MAX_BATCH = MAX_BATCH_UPDATE_REQUESTS;
+
+    // Separate insert and format requests
+    // Insert operations must be executed before formatting operations
+    const insertRequests = requests.filter(r =>
+        'insertText' in r || 'insertTable' in r || 'insertPageBreak' in r ||
+        'insertInlineImage' in r || 'insertSectionBreak' in r
+    );
+    const formatRequests = requests.filter(r =>
+        !('insertText' in r || 'insertTable' in r || 'insertPageBreak' in r ||
+          'insertInlineImage' in r || 'insertSectionBreak' in r)
+    );
+
+    // Execute insert batches first
+    if (insertRequests.length > 0) {
+        for (let i = 0; i < insertRequests.length; i += MAX_BATCH) {
+            const batch = insertRequests.slice(i, i + MAX_BATCH);
+            await executeBatchUpdate(docs, documentId, batch);
+            if (log) {
+                const batchNum = Math.floor(i / MAX_BATCH) + 1;
+                const totalBatches = Math.ceil(insertRequests.length / MAX_BATCH);
+                log.info(`Executed insert batch ${batchNum}/${totalBatches} (${batch.length} requests)`);
+            }
+        }
+    }
+
+    // Then execute format batches
+    if (formatRequests.length > 0) {
+        for (let i = 0; i < formatRequests.length; i += MAX_BATCH) {
+            const batch = formatRequests.slice(i, i + MAX_BATCH);
+            await executeBatchUpdate(docs, documentId, batch);
+            if (log) {
+                const batchNum = Math.floor(i / MAX_BATCH) + 1;
+                const totalBatches = Math.ceil(formatRequests.length / MAX_BATCH);
+                log.info(`Executed format batch ${batchNum}/${totalBatches} (${batch.length} requests)`);
+            }
+        }
+    }
+}
+
 // --- Text Finding Helper ---
 // This improved version is more robust in handling various text structure scenarios
 export async function findTextRange(docs: Docs, documentId: string, textToFind: string, instance: number = 1): Promise<{ startIndex: number; endIndex: number } | null> {
@@ -263,7 +323,8 @@ try {
 export function buildUpdateTextStyleRequest(
 startIndex: number,
 endIndex: number,
-style: TextStyleArgs
+style: TextStyleArgs,
+tabId?: string
 ): { request: docs_v1.Schema$Request, fields: string[] } | null {
     const textStyle: docs_v1.Schema$TextStyle = {};
 const fieldsToUpdate: string[] = [];
@@ -291,9 +352,14 @@ const fieldsToUpdate: string[] = [];
 
     if (fieldsToUpdate.length === 0) return null; // No styles to apply
 
+    const range: docs_v1.Schema$Range = { startIndex, endIndex };
+    if (tabId) {
+        range.tabId = tabId;
+    }
+
     const request: docs_v1.Schema$Request = {
         updateTextStyle: {
-            range: { startIndex, endIndex },
+            range,
             textStyle: textStyle,
             fields: fieldsToUpdate.join(','),
         }
@@ -305,7 +371,8 @@ const fieldsToUpdate: string[] = [];
 export function buildUpdateParagraphStyleRequest(
 startIndex: number,
 endIndex: number,
-style: ParagraphStyleArgs
+style: ParagraphStyleArgs,
+tabId?: string
 ): { request: docs_v1.Schema$Request, fields: string[] } | null {
     // Create style object and track which fields to update
     const paragraphStyle: docs_v1.Schema$ParagraphStyle = {};
@@ -366,10 +433,16 @@ style: ParagraphStyleArgs
         return null; // No styles to apply
     }
 
+    // Build the range with optional tabId
+    const range: docs_v1.Schema$Range = { startIndex, endIndex };
+    if (tabId) {
+        range.tabId = tabId;
+    }
+
     // Build the request object
     const request: docs_v1.Schema$Request = {
         updateParagraphStyle: {
-            range: { startIndex, endIndex },
+            range,
             paragraphStyle: paragraphStyle,
             fields: fieldsToUpdate.join(','),
         }

@@ -125,12 +125,23 @@ styleArgs => Object.values(styleArgs).some(v => v !== undefined),
 });
 export type ApplyParagraphStyleToolArgs = z.infer<typeof ApplyParagraphStyleToolParameters>;
 
-// --- Error Class ---
+// --- Error Classes ---
 // Use FastMCP's UserError for client-facing issues
-// Define a custom error for internal issues if needed
+// Define custom errors for internal issues if needed
 export class NotImplementedError extends Error {
 constructor(message = "This feature is not yet implemented.") {
 super(message);
 this.name = "NotImplementedError";
+}
+}
+
+export class MarkdownConversionError extends Error {
+constructor(
+message: string,
+public markdownPosition?: number,
+public tokenType?: string
+) {
+super(message);
+this.name = "MarkdownConversionError";
 }
 }

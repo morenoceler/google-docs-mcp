@@ -20,6 +20,14 @@ This comprehensive server uses the Model Context Protocol (MCP) and the `fastmcp
 - **Delete Content:** Remove content from a document with `deleteRange`
 - **Tab Support:** Work with multi-tab documents using `listDocumentTabs` and optional `tabId` parameter in read/write operations
 
+### 🆕 Markdown Support
+
+- **Write in Markdown:** Edit documents using familiar markdown syntax
+- **Rich Formatting:** Supports headings, bold, italic, strikethrough, links, and lists
+- **Bidirectional Conversion:** Read docs as markdown, edit locally, and apply changes back with `replaceDocumentWithMarkdown`
+- **Append Markdown:** Add markdown content to documents with `appendMarkdownToGoogleDoc`
+- **Full Workflow:** Retrieve → Edit offline → Apply formatting in bulk
+
 ### Formatting & Styling
 
 - **Text Formatting:** Apply rich styling with `applyTextStyle` (bold, italic, colors, etc.)

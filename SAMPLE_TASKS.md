@@ -1,6 +1,6 @@
-# 15 Powerful Tasks with the Ultimate Google Docs & Drive MCP Server
+# 16 Powerful Tasks with the Ultimate Google Docs & Drive MCP Server
 
-This document showcases practical examples of what you can accomplish with the enhanced Google Docs & Drive MCP Server. These examples demonstrate how AI assistants like Claude can perform sophisticated document formatting, structuring, and file management tasks through the MCP interface.
+This document showcases practical examples of what you can accomplish with the enhanced Google Docs & Drive MCP Server. These examples demonstrate how AI assistants like Claude can perform sophisticated document formatting, structuring, markdown editing, and file management tasks through the MCP interface.
 
 ## Document Formatting & Structure Tasks
 
@@ -227,4 +227,33 @@ Steps:
    - File size and sharing status
 5. Add summary statistics and organization recommendations
 6. Set up automated folder structures for better organization
+```
+
+## Markdown Editing Tasks
+
+## 16. Edit Documents Using Markdown
+
+```
+Task: "Retrieve a document, edit it using markdown format, and apply changes back."
+
+Steps:
+1. Retrieve document as markdown: readGoogleDoc with format='markdown'
+2. Edit the markdown locally using your preferred editor (VS Code, Vim, etc.)
+3. Add/modify content with markdown syntax:
+   - Headings: # H1, ## H2, ### H3, etc.
+   - Bold: **bold text**
+   - Italic: *italic text*
+   - Strikethrough: ~~strikethrough~~
+   - Links: [link text](https://example.com)
+   - Lists: - bullet or 1. numbered
+   - Nested formatting: ***bold italic***, **[bold link](url)**
+4. Apply changes with replaceDocumentWithMarkdown or appendMarkdownToGoogleDoc
+5. Verify formatting preserved correctly
+
+Benefits:
+- Work offline with your favorite text editor
+- Use powerful editor features (find/replace, multi-cursor, etc.)
+- Version control with Git
+- Batch processing with scripts
+- Familiar markdown syntax for faster editing
 ```
