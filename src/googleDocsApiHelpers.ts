@@ -69,18 +69,44 @@ export async function executeBatchUpdateWithSplitting(
 
     const MAX_BATCH = MAX_BATCH_UPDATE_REQUESTS;
 
-    // Separate insert and format requests
-    // Insert operations must be executed before formatting operations
+    // Separate requests into three categories
+    // Order of execution: delete → insert → format
+    const deleteRequests = requests.filter(r =>
+        'deleteContentRange' in r
+    );
     const insertRequests = requests.filter(r =>
         'insertText' in r || 'insertTable' in r || 'insertPageBreak' in r ||
         'insertInlineImage' in r || 'insertSectionBreak' in r
     );
     const formatRequests = requests.filter(r =>
+        !('deleteContentRange' in r) &&
         !('insertText' in r || 'insertTable' in r || 'insertPageBreak' in r ||
           'insertInlineImage' in r || 'insertSectionBreak' in r)
     );
 
-    // Execute insert batches first
+    // Execute delete batches first (must happen before inserts)
+    if (deleteRequests.length > 0) {
+        if (log) {
+            log.info(`Executing ${deleteRequests.length} delete requests FIRST (in separate API call)`);
+        }
+        for (let i = 0; i < deleteRequests.length; i += MAX_BATCH) {
+            const batch = deleteRequests.slice(i, i + MAX_BATCH);
+            if (log) {
+                log.info(`Delete batch content: ${JSON.stringify(batch)}`);
+            }
+            await executeBatchUpdate(docs, documentId, batch);
+            if (log) {
+                const batchNum = Math.floor(i / MAX_BATCH) + 1;
+                const totalBatches = Math.ceil(deleteRequests.length / MAX_BATCH);
+                log.info(`Executed delete batch ${batchNum}/${totalBatches} (${batch.length} requests)`);
+            }
+        }
+        if (log) {
+            log.info(`Delete batches complete. Document should now be empty (except section break).`);
+        }
+    }
+
+    // Then execute insert batches
     if (insertRequests.length > 0) {
         for (let i = 0; i < insertRequests.length; i += MAX_BATCH) {
             const batch = insertRequests.slice(i, i + MAX_BATCH);
@@ -93,7 +119,7 @@ export async function executeBatchUpdateWithSplitting(
         }
     }
 
-    // Then execute format batches
+    // Finally execute format batches
     if (formatRequests.length > 0) {
         for (let i = 0; i < formatRequests.length; i += MAX_BATCH) {
             const batch = formatRequests.slice(i, i + MAX_BATCH);

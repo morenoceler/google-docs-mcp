@@ -738,32 +738,31 @@ try {
     }
   }
 
-  // 3. Build requests
-  const requests: docs_v1.Schema$Request[] = [];
-
-  // Delete existing content if there's a range to delete
+  // 3. Delete existing content FIRST in a separate API call
   if (endIndex > startIndex) {
     const deleteRange: any = { startIndex, endIndex };
     if (args.tabId) {
       deleteRange.tabId = args.tabId;
     }
-    requests.push({
+    log.info(`Deleting content from index ${startIndex} to ${endIndex} (separate API call)`);
+    await GDocsHelpers.executeBatchUpdate(docs, args.documentId, [{
       deleteContentRange: { range: deleteRange }
-    });
-    log.info(`Deleting content from index ${startIndex} to ${endIndex}`);
+    }]);
+    log.info(`Delete complete. Document now empty.`);
   }
 
-  // 4. Convert markdown to requests
+  // 4. Convert markdown to requests (indices calculated for empty document)
+  log.info(`Converting markdown starting at index ${startIndex} (after delete, document should be empty)`);
   const markdownRequests = convertMarkdownToRequests(
     args.markdown,
     startIndex,
     args.tabId
   );
   log.info(`Generated ${markdownRequests.length} requests from markdown`);
-  requests.push(...markdownRequests);
+  log.info(`First 3 requests: ${JSON.stringify(markdownRequests.slice(0, 3), null, 2)}`);
 
-  // 5. Execute with batch splitting
-  await GDocsHelpers.executeBatchUpdateWithSplitting(docs, args.documentId, requests, log);
+  // 5. Execute markdown requests (insert + format) in separate API call(s)
+  await GDocsHelpers.executeBatchUpdateWithSplitting(docs, args.documentId, markdownRequests, log);
 
   log.info(`Successfully replaced document content`);
   return `Successfully replaced document content with ${args.markdown.length} characters of markdown (${markdownRequests.length} operations).`;
