@@ -506,3 +506,7 @@ While this MCP server provides comprehensive Google Docs, Sheets, and Drive func
 ## License
 
 This project is licensed under the MIT License - see the `LICENSE` file for details. (Note: You should add a `LICENSE` file containing the MIT License text to your repository).
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=a-bonus/google-docs-mcp&type=date&legend=top-left)](https://www.star-history.com/#a-bonus/google-docs-mcp&type=date&legend=top-left)
