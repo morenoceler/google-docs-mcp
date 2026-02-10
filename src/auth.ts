@@ -4,7 +4,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { JWT } from 'google-auth-library'; // ADDED: Import for Service Account client
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as readline from 'readline/promises';
+import * as http from 'http';
 import { fileURLToPath } from 'url';
 
 // --- Calculate paths relative to this script file (ESM way) ---
@@ -96,39 +96,56 @@ async function saveCredentials(client: OAuth2Client): Promise<void> {
 }
 
 async function authenticate(): Promise<OAuth2Client> {
-  const { client_secret, client_id, redirect_uris, client_type } = await loadClientSecrets();
-  // For web clients, use the configured redirect URI; for desktop clients, use 'urn:ietf:wg:oauth:2.0:oob'
-  const redirectUri = client_type === 'web' ? redirect_uris[0] : 'urn:ietf:wg:oauth:2.0:oob';
-  console.error(`DEBUG: Using redirect URI: ${redirectUri}`);
-  console.error(`DEBUG: Client type: ${client_type}`);
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+  const { client_secret, client_id } = await loadClientSecrets();
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Start a temporary local server to receive the OAuth callback
+  const server = http.createServer();
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const port = (server.address() as { port: number }).port;
+  const redirectUri = `http://127.0.0.1:${port}`;
+
+  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
 
   const authorizeUrl = oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES.join(' '),
   });
 
-  console.error('DEBUG: Generated auth URL:', authorizeUrl);
   console.error('Authorize this app by visiting this url:', authorizeUrl);
-  const code = await rl.question('Enter the code from that page here: ');
-  rl.close();
 
-  try {
-    const { tokens } = await oAuth2Client.getToken(code);
-    oAuth2Client.setCredentials(tokens);
-    if (tokens.refresh_token) { // Save only if we got a refresh token
-         await saveCredentials(oAuth2Client);
-    } else {
-         console.error("Did not receive refresh token. Token might expire.");
-    }
-    console.error('Authentication successful!');
-    return oAuth2Client;
-  } catch (err) {
-    console.error('Error retrieving access token', err);
-    throw new Error('Authentication failed');
+  // Wait for the OAuth callback
+  const code = await new Promise<string>((resolve, reject) => {
+    server.on('request', (req, res) => {
+      const url = new URL(req.url!, `http://127.0.0.1:${port}`);
+      const authCode = url.searchParams.get('code');
+      const error = url.searchParams.get('error');
+
+      if (error) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<h1>Authorization failed</h1><p>You can close this tab.</p>');
+        reject(new Error(`Authorization error: ${error}`));
+        server.close();
+        return;
+      }
+
+      if (authCode) {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<h1>Authorization successful!</h1><p>You can close this tab.</p>');
+        resolve(authCode);
+        server.close();
+      }
+    });
+  });
+
+  const { tokens } = await oAuth2Client.getToken(code);
+  oAuth2Client.setCredentials(tokens);
+  if (tokens.refresh_token) {
+    await saveCredentials(oAuth2Client);
+  } else {
+    console.error("Did not receive refresh token. Token might expire.");
   }
+  console.error('Authentication successful!');
+  return oAuth2Client;
 }
 
 // --- MODIFIED: The Main Exported Function ---
