@@ -1058,18 +1058,89 @@ execute: async (args, { log }) => {
 const docs = await getDocsClient();
 log.info(`Editing cell (${args.rowIndex}, ${args.columnIndex}) in table starting at ${args.tableStartIndex}, doc ${args.documentId}`);
 
-        // TODO: Implement complex logic
-        // 1. Find the cell's content range based on tableStartIndex, rowIndex, columnIndex. This is NON-TRIVIAL.
-        //    Requires getting the document, finding the table element, iterating through rows/cells to calculate indices.
-        // 2. If textContent is provided, generate a DeleteContentRange request for the cell's current content.
-        // 3. Generate an InsertText request for the new textContent at the cell's start index.
-        // 4. If textStyle is provided, generate UpdateTextStyle requests for the new text range.
-        // 5. If paragraphStyle is provided, generate UpdateParagraphStyle requests for the cell's paragraph range.
-        // 6. Execute batch update.
+        try {
+            // 1. Find the cell's content range
+            const cellRange = await GDocsHelpers.getTableCellRange(
+                docs, args.documentId,
+                args.tableStartIndex, args.rowIndex, args.columnIndex
+            );
+            log.info(`Cell content range: ${cellRange.startIndex}-${cellRange.endIndex}`);
 
-        log.error("editTableCell is not implemented due to complexity of finding cell indices.");
-        throw new NotImplementedError("Editing table cells is complex and not yet implemented.");
-        // return `Edit request for cell (${args.rowIndex}, ${args.columnIndex}) submitted (Not Implemented).`;
+            const requests: docs_v1.Schema$Request[] = [];
+            let newTextStart = cellRange.startIndex;
+            let newTextEnd = cellRange.startIndex;
+
+            // 2. Replace text content if provided
+            if (args.textContent !== undefined) {
+                // Delete existing content (if any exists beyond the structural newline)
+                if (cellRange.endIndex > cellRange.startIndex) {
+                    requests.push({
+                        deleteContentRange: {
+                            range: {
+                                startIndex: cellRange.startIndex,
+                                endIndex: cellRange.endIndex,
+                            }
+                        }
+                    });
+                }
+
+                // Insert new text at cell start
+                if (args.textContent.length > 0) {
+                    requests.push({
+                        insertText: {
+                            location: { index: cellRange.startIndex },
+                            text: args.textContent,
+                        }
+                    });
+                }
+
+                newTextEnd = cellRange.startIndex + args.textContent.length;
+            } else {
+                // No text replacement — style the existing content
+                newTextEnd = cellRange.endIndex;
+            }
+
+            // 3. Apply text style if provided
+            if (args.textStyle && newTextEnd > newTextStart) {
+                const styleResult = GDocsHelpers.buildUpdateTextStyleRequest(
+                    newTextStart, newTextEnd, args.textStyle as TextStyleArgs
+                );
+                if (styleResult) {
+                    requests.push(styleResult.request);
+                }
+            }
+
+            // 4. Apply paragraph style if provided
+            if (args.paragraphStyle && newTextEnd >= newTextStart) {
+                // Paragraph style range should include the trailing newline
+                const paraEnd = args.textContent !== undefined
+                    ? newTextEnd + 1  // include the \n after inserted text
+                    : cellRange.endIndex + 1; // include the original trailing \n
+                const paraResult = GDocsHelpers.buildUpdateParagraphStyleRequest(
+                    newTextStart, paraEnd, args.paragraphStyle as ParagraphStyleArgs
+                );
+                if (paraResult) {
+                    requests.push(paraResult.request);
+                }
+            }
+
+            if (requests.length === 0) {
+                return `No changes specified for cell (${args.rowIndex}, ${args.columnIndex}). Provide textContent, textStyle, or paragraphStyle.`;
+            }
+
+            // 5. Execute — use splitting to handle delete→insert→format ordering
+            await GDocsHelpers.executeBatchUpdateWithSplitting(docs, args.documentId, requests, log);
+
+            const actions: string[] = [];
+            if (args.textContent !== undefined) actions.push(`text set to "${args.textContent}"`);
+            if (args.textStyle) actions.push('text style applied');
+            if (args.paragraphStyle) actions.push('paragraph style applied');
+            return `Successfully edited cell (${args.rowIndex}, ${args.columnIndex}): ${actions.join(', ')}.`;
+        } catch (error: any) {
+            log.error(`Error editing table cell: ${error.message || error}`);
+            if (error instanceof UserError) throw error;
+            throw new UserError(`Failed to edit table cell: ${error.message || 'Unknown error'}`);
+        }
     }
 
 });

@@ -1,5 +1,5 @@
 // tests/helpers.test.js
-import { findTextRange } from '../dist/googleDocsApiHelpers.js';
+import { findTextRange, getTableCellRange } from '../dist/googleDocsApiHelpers.js';
 import assert from 'node:assert';
 import { describe, it, mock } from 'node:test';
 
@@ -45,7 +45,7 @@ describe('Text Range Finding', () => {
         mockDocs.documents.get.mock.calls[0].arguments[0], 
         {
           documentId: 'doc123',
-          fields: 'body(content(paragraph(elements(startIndex,endIndex,textRun(content)))))'
+          fields: 'body(content(paragraph(elements(startIndex,endIndex,textRun(content))),table,sectionBreak,tableOfContents,startIndex,endIndex))'
         }
       );
     });
@@ -159,6 +159,172 @@ describe('Text Range Finding', () => {
       // Find text that spans runs: "a test"
       const result = await findTextRange(mockDocs, 'doc123', 'a test', 1);
       assert.deepStrictEqual(result, { startIndex: 9, endIndex: 15 });
+    });
+  });
+});
+
+describe('Table Cell Range Finding', () => {
+  // Helper to build a mock document with a table
+  function buildMockDocsWithTable(tableStartIndex, tableRows) {
+    return {
+      documents: {
+        get: mock.fn(async () => ({
+          data: {
+            body: {
+              content: [
+                {
+                  startIndex: 0,
+                  endIndex: tableStartIndex,
+                  paragraph: {
+                    elements: [
+                      { startIndex: 0, endIndex: tableStartIndex, textRun: { content: 'Before table\n' } }
+                    ]
+                  }
+                },
+                {
+                  startIndex: tableStartIndex,
+                  endIndex: 200,
+                  table: {
+                    rows: tableRows.length,
+                    columns: tableRows[0]?.length ?? 0,
+                    tableRows: tableRows.map(row => ({
+                      tableCells: row.map(cell => ({
+                        content: cell.content
+                      }))
+                    }))
+                  }
+                }
+              ]
+            }
+          }
+        }))
+      }
+    };
+  }
+
+  describe('getTableCellRange', () => {
+    it('should return correct range for a cell with text content', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [
+          {
+            content: [
+              {
+                startIndex: 16,
+                endIndex: 26,
+                paragraph: {
+                  elements: [
+                    { startIndex: 16, endIndex: 26, textRun: { content: 'Cell A1\n' } }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            content: [
+              {
+                startIndex: 28,
+                endIndex: 38,
+                paragraph: {
+                  elements: [
+                    { startIndex: 28, endIndex: 38, textRun: { content: 'Cell B1\n' } }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      ]);
+
+      const result = await getTableCellRange(mockDocs, 'doc123', 14, 0, 0);
+      // endIndex should exclude the trailing \n (26 - 1 = 25)
+      assert.deepStrictEqual(result, { startIndex: 16, endIndex: 25 });
+    });
+
+    it('should return correct range for second column', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [
+          {
+            content: [
+              { startIndex: 16, endIndex: 26, paragraph: { elements: [{ startIndex: 16, endIndex: 26, textRun: { content: 'Cell A1\n' } }] } }
+            ]
+          },
+          {
+            content: [
+              { startIndex: 28, endIndex: 38, paragraph: { elements: [{ startIndex: 28, endIndex: 38, textRun: { content: 'Cell B1\n' } }] } }
+            ]
+          }
+        ]
+      ]);
+
+      const result = await getTableCellRange(mockDocs, 'doc123', 14, 0, 1);
+      assert.deepStrictEqual(result, { startIndex: 28, endIndex: 37 });
+    });
+
+    it('should throw UserError if table not found at given startIndex', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [{ content: [{ startIndex: 16, endIndex: 20, paragraph: { elements: [] } }] }]
+      ]);
+
+      await assert.rejects(
+        () => getTableCellRange(mockDocs, 'doc123', 999, 0, 0),
+        (err) => {
+          assert.ok(err.message.includes('No table found at startIndex 999'));
+          return true;
+        }
+      );
+    });
+
+    it('should throw UserError if row index is out of range', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [{ content: [{ startIndex: 16, endIndex: 20, paragraph: { elements: [] } }] }]
+      ]);
+
+      await assert.rejects(
+        () => getTableCellRange(mockDocs, 'doc123', 14, 5, 0),
+        (err) => {
+          assert.ok(err.message.includes('Row index 5 is out of range'));
+          return true;
+        }
+      );
+    });
+
+    it('should throw UserError if column index is out of range', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [{ content: [{ startIndex: 16, endIndex: 20, paragraph: { elements: [] } }] }]
+      ]);
+
+      await assert.rejects(
+        () => getTableCellRange(mockDocs, 'doc123', 14, 0, 5),
+        (err) => {
+          assert.ok(err.message.includes('Column index 5 is out of range'));
+          return true;
+        }
+      );
+    });
+
+    it('should handle cell with multiple paragraphs', async () => {
+      const mockDocs = buildMockDocsWithTable(14, [
+        [
+          {
+            content: [
+              {
+                startIndex: 16,
+                endIndex: 26,
+                paragraph: { elements: [{ startIndex: 16, endIndex: 26, textRun: { content: 'Line one\n' } }] }
+              },
+              {
+                startIndex: 26,
+                endIndex: 36,
+                paragraph: { elements: [{ startIndex: 26, endIndex: 36, textRun: { content: 'Line two\n' } }] }
+              }
+            ]
+          }
+        ]
+      ]);
+
+      const result = await getTableCellRange(mockDocs, 'doc123', 14, 0, 0);
+      // Should span from first paragraph start to last paragraph end - 1
+      assert.deepStrictEqual(result, { startIndex: 16, endIndex: 35 });
     });
   });
 });

@@ -505,6 +505,88 @@ text: text,
 return executeBatchUpdate(docs, documentId, [request]);
 }
 
+// --- Table Cell Helper ---
+
+/**
+ * Finds the content range of a specific table cell.
+ * Returns the start and end indices of the cell's text content (excluding trailing newline).
+ */
+export async function getTableCellRange(
+    docs: Docs,
+    documentId: string,
+    tableStartIndex: number,
+    rowIndex: number,
+    columnIndex: number,
+    tabId?: string
+): Promise<{ startIndex: number; endIndex: number }> {
+    const res = await docs.documents.get({
+        documentId,
+        ...(tabId && { includeTabsContent: true }),
+    });
+
+    // Get body content from the correct tab or default
+    let bodyContent: docs_v1.Schema$StructuralElement[] | undefined;
+    if (tabId) {
+        const allTabs = getAllTabs(res.data);
+        const tab = allTabs.find(t => t.tabProperties?.tabId === tabId);
+        if (!tab) throw new UserError(`Tab with ID "${tabId}" not found.`);
+        bodyContent = tab.documentTab?.body?.content;
+    } else {
+        bodyContent = res.data.body?.content;
+    }
+
+    if (!bodyContent) {
+        throw new UserError(`No content found in document ${documentId}.`);
+    }
+
+    // Find the table element matching tableStartIndex
+    const tableElement = bodyContent.find(
+        el => el.table && el.startIndex === tableStartIndex
+    );
+    if (!tableElement || !tableElement.table) {
+        throw new UserError(
+            `No table found at startIndex ${tableStartIndex}. Use readGoogleDoc with format='json' to find the correct table startIndex.`
+        );
+    }
+
+    const table = tableElement.table;
+    const rows = table.tableRows;
+    if (!rows || rowIndex < 0 || rowIndex >= rows.length) {
+        throw new UserError(
+            `Row index ${rowIndex} is out of range. Table has ${rows?.length ?? 0} rows (0-based).`
+        );
+    }
+
+    const cells = rows[rowIndex].tableCells;
+    if (!cells || columnIndex < 0 || columnIndex >= cells.length) {
+        throw new UserError(
+            `Column index ${columnIndex} is out of range. Row ${rowIndex} has ${cells?.length ?? 0} columns (0-based).`
+        );
+    }
+
+    const cell = cells[columnIndex];
+    const cellContent = cell.content;
+    if (!cellContent || cellContent.length === 0) {
+        throw new UserError(`Cell (${rowIndex}, ${columnIndex}) has no content elements.`);
+    }
+
+    // Cell always has at least one paragraph with a trailing \n.
+    // We want the range covering all content *before* that final \n.
+    const firstParagraph = cellContent[0];
+    const lastParagraph = cellContent[cellContent.length - 1];
+
+    const cellStartIndex = firstParagraph.startIndex;
+    // The endIndex of the last paragraph includes the trailing \n.
+    // We subtract 1 to exclude it so delete operations don't remove the cell structure.
+    const cellEndIndex = lastParagraph.endIndex;
+
+    if (cellStartIndex == null || cellEndIndex == null) {
+        throw new UserError(`Could not determine content range for cell (${rowIndex}, ${columnIndex}).`);
+    }
+
+    return { startIndex: cellStartIndex, endIndex: cellEndIndex - 1 };
+}
+
 // --- Complex / Stubbed Helpers ---
 
 export async function findParagraphsMatchingStyle(
