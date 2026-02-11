@@ -1160,7 +1160,8 @@ if (args.uploadToSameFolder) {
 try {
 const docInfo = await drive.files.get({
 fileId: args.documentId,
-fields: 'parents'
+fields: 'parents',
+supportsAllDrives: true,
 });
 if (docInfo.data.parents && docInfo.data.parents.length > 0) {
 parentFolderId = docInfo.data.parents[0];
@@ -1248,7 +1249,7 @@ server.addTool({
       const response = await drive.comments.list({
         fileId: args.documentId,
         fields: 'comments(id,content,quotedFileContent,author,createdTime,resolved)',
-        pageSize: 100
+        pageSize: 100,
       });
 
       const comments = response.data.comments || [];
@@ -1302,7 +1303,7 @@ server.addTool({
       const response = await drive.comments.get({
         fileId: args.documentId,
         commentId: args.commentId,
-        fields: 'id,content,quotedFileContent,author,createdTime,resolved,replies(id,content,author,createdTime)'
+        fields: 'id,content,quotedFileContent,author,createdTime,resolved,replies(id,content,author,createdTime)',
       });
 
       const comment = response.data;
@@ -1457,7 +1458,7 @@ server.addTool({
       const currentComment = await drive.comments.get({
         fileId: args.documentId,
         commentId: args.commentId,
-        fields: 'content'
+        fields: 'content',
       });
 
       // Update with both content and resolved status
@@ -1475,7 +1476,7 @@ server.addTool({
       const verifyComment = await drive.comments.get({
         fileId: args.documentId,
         commentId: args.commentId,
-        fields: 'resolved'
+        fields: 'resolved',
       });
 
       if (verifyComment.data.resolved) {
@@ -1507,7 +1508,7 @@ server.addTool({
 
       await drive.comments.delete({
         fileId: args.documentId,
-        commentId: args.commentId
+        commentId: args.commentId,
       });
 
       return `Comment ${args.commentId} has been deleted.`;
@@ -1635,6 +1636,8 @@ try {
     pageSize: args.maxResults,
     orderBy: args.orderBy === 'name' ? 'name' : args.orderBy,
     fields: 'files(id,name,modifiedTime,createdTime,size,webViewLink,owners(displayName,emailAddress))',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const files = response.data.files || [];
@@ -1698,6 +1701,8 @@ try {
     pageSize: args.maxResults,
     orderBy: 'modifiedTime desc',
     fields: 'files(id,name,modifiedTime,createdTime,webViewLink,owners(displayName),parents)',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const files = response.data.files || [];
@@ -1749,6 +1754,8 @@ try {
     pageSize: args.maxResults,
     orderBy: 'modifiedTime desc',
     fields: 'files(id,name,modifiedTime,createdTime,webViewLink,owners(displayName),lastModifyingUser(displayName))',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const files = response.data.files || [];
@@ -1793,6 +1800,7 @@ try {
     // Note: 'permissions' and 'alternateLink' fields removed - they cause
     // "Invalid field selection" errors for Google Docs files
     fields: 'id,name,description,mimeType,size,createdTime,modifiedTime,webViewLink,owners(displayName,emailAddress),lastModifyingUser(displayName,emailAddress),shared,parents,version',
+    supportsAllDrives: true,
   });
 
   const file = response.data;
@@ -1866,6 +1874,7 @@ try {
   const response = await drive.files.create({
     requestBody: folderMetadata,
     fields: 'id,name,parents,webViewLink',
+    supportsAllDrives: true,
   });
 
   const folder = response.data;
@@ -1911,6 +1920,8 @@ try {
     pageSize: args.maxResults,
     orderBy: 'folder,name',
     fields: 'files(id,name,mimeType,size,modifiedTime,webViewLink,owners(displayName))',
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   const items = response.data.files || [];
@@ -1975,6 +1986,7 @@ try {
   const response = await drive.files.get({
     fileId: args.folderId,
     fields: 'id,name,description,createdTime,modifiedTime,webViewLink,owners(displayName,emailAddress),lastModifyingUser(displayName),shared,parents',
+    supportsAllDrives: true,
   });
 
   const folder = response.data;
@@ -2042,6 +2054,7 @@ try {
   const fileInfo = await drive.files.get({
     fileId: args.fileId,
     fields: 'name,parents',
+    supportsAllDrives: true,
   });
 
   const fileName = fileInfo.data.name;
@@ -2051,6 +2064,7 @@ try {
     fileId: args.fileId,
     addParents: args.newParentId,
     fields: 'id,name,parents',
+    supportsAllDrives: true,
   };
 
   if (args.removeFromAllParents && currentParents.length > 0) {
@@ -2087,6 +2101,7 @@ try {
   const originalFile = await drive.files.get({
     fileId: args.fileId,
     fields: 'name,parents',
+    supportsAllDrives: true,
   });
 
   const copyMetadata: drive_v3.Schema$File = {
@@ -2103,6 +2118,7 @@ try {
     fileId: args.fileId,
     requestBody: copyMetadata,
     fields: 'id,name,webViewLink',
+    supportsAllDrives: true,
   });
 
   const copiedFile = response.data;
@@ -2134,6 +2150,7 @@ try {
       name: args.newName,
     },
     fields: 'id,name,webViewLink',
+    supportsAllDrives: true,
   });
 
   const file = response.data;
@@ -2163,6 +2180,7 @@ try {
   const fileInfo = await drive.files.get({
     fileId: args.fileId,
     fields: 'name,mimeType',
+    supportsAllDrives: true,
   });
 
   const fileName = fileInfo.data.name;
@@ -2171,6 +2189,7 @@ try {
   if (args.skipTrash) {
     await drive.files.delete({
       fileId: args.fileId,
+      supportsAllDrives: true,
     });
     return `Permanently deleted ${isFolder ? 'folder' : 'file'} "${fileName}".`;
   } else {
@@ -2179,6 +2198,7 @@ try {
       requestBody: {
         trashed: true,
       },
+      supportsAllDrives: true,
     });
     return `Moved ${isFolder ? 'folder' : 'file'} "${fileName}" to trash. It can be restored from the trash.`;
   }
@@ -2218,6 +2238,7 @@ try {
   const response = await drive.files.create({
     requestBody: documentMetadata,
     fields: 'id,name,webViewLink',
+    supportsAllDrives: true,
   });
 
   const document = response.data;
@@ -2282,6 +2303,7 @@ try {
     fileId: args.templateId,
     requestBody: copyMetadata,
     fields: 'id,name,webViewLink',
+    supportsAllDrives: true,
   });
 
   const document = response.data;
@@ -2560,6 +2582,7 @@ execute: async (args, { log }) => {
     const driveResponse = await drive.files.create({
       requestBody: spreadsheetMetadata,
       fields: 'id,name,webViewLink',
+      supportsAllDrives: true,
     });
 
     const spreadsheetId = driveResponse.data.id;
@@ -2620,6 +2643,8 @@ execute: async (args, { log }) => {
       pageSize: args.maxResults,
       orderBy: args.orderBy === 'name' ? 'name' : args.orderBy,
       fields: 'files(id,name,modifiedTime,createdTime,size,webViewLink,owners(displayName,emailAddress))',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files = response.data.files || [];

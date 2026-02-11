@@ -16,6 +16,10 @@ FastMCP server with 44 tools for Google Docs, Sheets, and Drive.
 
 *Not fully implemented
 
+## Shared Drives Support
+
+The server supports Google Shared Drives. All Drive file operations (`files.list`, `files.get`, `files.create`, `files.update`, `files.copy`, `files.delete`, `permissions.create`) use `supportsAllDrives: true` and `includeItemsFromAllDrives: true` (for list operations), enabling agents to query, create, and update documents in shared drives.
+
 ## Known Limitations
 
 - **Comment anchoring:** Programmatically created comments appear in "All Comments" but aren't visibly anchored to text in the UI
