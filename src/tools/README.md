@@ -1,6 +1,6 @@
 # Tools
 
-This directory contains all 38 MCP tool definitions for the Google Docs, Sheets, and Drive server. Tools are organized into domain-specific folders, each with its own router (`index.ts`) that registers its tools with the server.
+This directory contains all 41 MCP tool definitions for the Google Docs, Sheets, and Drive server. Tools are organized into domain-specific folders, each with its own router (`index.ts`) that registers its tools with the server.
 
 ## Architecture
 
@@ -24,7 +24,7 @@ Each domain folder contains:
 |--------|------:|-------------|
 | [docs](./docs/) | 14 | Read, write, format, and comment on Google Documents |
 | [drive](./drive/) | 12 | Search, create, move, copy, rename, and delete files and folders |
-| [sheets](./sheets/) | 8 | Read, write, append, and manage spreadsheets |
+| [sheets](./sheets/) | 11 | Read, write, append, format, validate, and manage spreadsheets |
 | [utils](./utils/) | 2 | Markdown conversion and other cross-cutting workflows |
 
 ## Adding a New Tool

@@ -8,6 +8,11 @@ import { register as addSpreadsheetSheet } from './addSpreadsheetSheet.js';
 import { register as createSpreadsheet } from './createSpreadsheet.js';
 import { register as listGoogleSheets } from './listGoogleSheets.js';
 
+// Formatting & validation
+import { register as formatCells } from './formatCells.js';
+import { register as freezeRowsAndColumns } from './freezeRowsAndColumns.js';
+import { register as setDropdownValidation } from './setDropdownValidation.js';
+
 export function registerSheetsTools(server: FastMCP) {
   readSpreadsheet(server);
   writeSpreadsheet(server);
@@ -17,4 +22,9 @@ export function registerSheetsTools(server: FastMCP) {
   addSpreadsheetSheet(server);
   createSpreadsheet(server);
   listGoogleSheets(server);
+
+  // Formatting & validation
+  formatCells(server);
+  freezeRowsAndColumns(server);
+  setDropdownValidation(server);
 }
