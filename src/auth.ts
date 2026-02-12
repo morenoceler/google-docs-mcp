@@ -19,7 +19,7 @@ const CREDENTIALS_PATH = path.join(projectRootDir, 'credentials.json');
 const SCOPES = [
   'https://www.googleapis.com/auth/documents',
   'https://www.googleapis.com/auth/drive', // Full Drive access for listing, searching, and document discovery
-  'https://www.googleapis.com/auth/spreadsheets' // Google Sheets API access
+  'https://www.googleapis.com/auth/spreadsheets', // Google Sheets API access
 ];
 
 // --- NEW FUNCTION: Handles Service Account Authentication ---
@@ -49,10 +49,14 @@ async function authorizeWithServiceAccount(): Promise<JWT> {
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       console.error(`FATAL: Service account key file not found at path: ${serviceAccountPath}`);
-      throw new Error(`Service account key file not found. Please check the path in SERVICE_ACCOUNT_PATH.`);
+      throw new Error(
+        `Service account key file not found. Please check the path in SERVICE_ACCOUNT_PATH.`
+      );
     }
     console.error('FATAL: Error loading or authorizing the service account key:', error.message);
-    throw new Error('Failed to authorize using the service account. Ensure the key file is valid and the path is correct.');
+    throw new Error(
+      'Failed to authorize using the service account. Ensure the key file is valid and the path is correct.'
+    );
   }
 }
 // --- END OF NEW FUNCTION---
@@ -74,12 +78,12 @@ async function loadClientSecrets() {
   const content = await fs.readFile(CREDENTIALS_PATH);
   const keys = JSON.parse(content.toString());
   const key = keys.installed || keys.web;
-   if (!key) throw new Error("Could not find client secrets in credentials.json.");
+  if (!key) throw new Error('Could not find client secrets in credentials.json.');
   return {
-      client_id: key.client_id,
-      client_secret: key.client_secret,
-      redirect_uris: key.redirect_uris || ['http://localhost:3000/'], // Default for web clients
-      client_type: keys.web ? 'web' : 'installed'
+    client_id: key.client_id,
+    client_secret: key.client_secret,
+    redirect_uris: key.redirect_uris || ['http://localhost:3000/'], // Default for web clients
+    client_type: keys.web ? 'web' : 'installed',
   };
 }
 
@@ -142,7 +146,7 @@ async function authenticate(): Promise<OAuth2Client> {
   if (tokens.refresh_token) {
     await saveCredentials(oAuth2Client);
   } else {
-    console.error("Did not receive refresh token. Token might expire.");
+    console.error('Did not receive refresh token. Token might expire.');
   }
   console.error('Authentication successful!');
   return oAuth2Client;

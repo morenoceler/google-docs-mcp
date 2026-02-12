@@ -1,0 +1,96 @@
+// src/clients.ts
+import { google, docs_v1, drive_v3, sheets_v4 } from 'googleapis';
+import { UserError } from 'fastmcp';
+import { OAuth2Client } from 'google-auth-library';
+import { authorize } from './auth.js';
+
+let authClient: OAuth2Client | null = null;
+let googleDocs: docs_v1.Docs | null = null;
+let googleDrive: drive_v3.Drive | null = null;
+let googleSheets: sheets_v4.Sheets | null = null;
+
+// --- Initialization ---
+export async function initializeGoogleClient() {
+  if (googleDocs && googleDrive && googleSheets)
+    return { authClient, googleDocs, googleDrive, googleSheets };
+  if (!authClient) {
+    // Check authClient instead of googleDocs to allow re-attempt
+    try {
+      console.error('Attempting to authorize Google API client...');
+      const client = await authorize();
+      authClient = client; // Assign client here
+      googleDocs = google.docs({ version: 'v1', auth: authClient });
+      googleDrive = google.drive({ version: 'v3', auth: authClient });
+      googleSheets = google.sheets({ version: 'v4', auth: authClient });
+      console.error('Google API client authorized successfully.');
+    } catch (error) {
+      console.error('FATAL: Failed to initialize Google API client:', error);
+      authClient = null; // Reset on failure
+      googleDocs = null;
+      googleDrive = null;
+      googleSheets = null;
+      // Decide if server should exit or just fail tools
+      throw new Error('Google client initialization failed. Cannot start server tools.');
+    }
+  }
+  // Ensure googleDocs, googleDrive, and googleSheets are set if authClient is valid
+  if (authClient && !googleDocs) {
+    googleDocs = google.docs({ version: 'v1', auth: authClient });
+  }
+  if (authClient && !googleDrive) {
+    googleDrive = google.drive({ version: 'v3', auth: authClient });
+  }
+  if (authClient && !googleSheets) {
+    googleSheets = google.sheets({ version: 'v4', auth: authClient });
+  }
+
+  if (!googleDocs || !googleDrive || !googleSheets) {
+    throw new Error('Google Docs, Drive, and Sheets clients could not be initialized.');
+  }
+
+  return { authClient, googleDocs, googleDrive, googleSheets };
+}
+
+// --- Helper to get Docs client within tools ---
+export async function getDocsClient() {
+  const { googleDocs: docs } = await initializeGoogleClient();
+  if (!docs) {
+    throw new UserError(
+      'Google Docs client is not initialized. Authentication might have failed during startup or lost connection.'
+    );
+  }
+  return docs;
+}
+
+// --- Helper to get Drive client within tools ---
+export async function getDriveClient() {
+  const { googleDrive: drive } = await initializeGoogleClient();
+  if (!drive) {
+    throw new UserError(
+      'Google Drive client is not initialized. Authentication might have failed during startup or lost connection.'
+    );
+  }
+  return drive;
+}
+
+// --- Helper to get Sheets client within tools ---
+export async function getSheetsClient() {
+  const { googleSheets: sheets } = await initializeGoogleClient();
+  if (!sheets) {
+    throw new UserError(
+      'Google Sheets client is not initialized. Authentication might have failed during startup or lost connection.'
+    );
+  }
+  return sheets;
+}
+
+// --- Helper to get Auth client for direct API usage ---
+export async function getAuthClient() {
+  const { authClient: client } = await initializeGoogleClient();
+  if (!client) {
+    throw new UserError(
+      'Auth client is not initialized. Authentication might have failed during startup or lost connection.'
+    );
+  }
+  return client;
+}

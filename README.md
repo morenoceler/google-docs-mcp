@@ -199,6 +199,7 @@ Now you need to run the server once manually to grant it permission to access yo
 For Google Workspace organizations that need to access documents across the domain without individual user OAuth flows, you can use a service account with domain-wide delegation.
 
 **Prerequisites:**
+
 - Google Workspace admin access to configure domain-wide delegation
 - A service account with domain-wide delegation enabled
 
@@ -216,6 +217,7 @@ For Google Workspace organizations that need to access documents across the doma
      - `https://www.googleapis.com/auth/spreadsheets`
 
 3. **Configure Environment Variables:**
+
    ```bash
    # Path to your service account key file
    export SERVICE_ACCOUNT_PATH="/path/to/service-account-key.json"
@@ -262,9 +264,7 @@ If you want to use this server with Claude Desktop, you need to tell Claude how 
       "mcpServers": {
         "google-docs-mcp": {
           "command": "node",
-          "args": [
-            "/PATH/TO/YOUR/CLONED/REPO/mcp-googledocs-server/dist/server.js"
-          ],
+          "args": ["/PATH/TO/YOUR/CLONED/REPO/mcp-googledocs-server/dist/server.js"],
           "env": {}
         }
         // Add commas here if you have other servers defined
@@ -321,6 +321,7 @@ When `tabId` is not specified, operations target the first tab (or the legacy do
 ### Advanced Usage Examples:
 
 **Google Docs:**
+
 - **Text Styling**: "Use `applyTextStyle` to make the text 'Important Section' bold and red (#FF0000) in document `YOUR_GOOGLE_DOC_ID`."
 - **Paragraph Styling**: "Use `applyParagraphStyle` to center-align the paragraph containing 'Title Here' in document `YOUR_GOOGLE_DOC_ID`."
 - **Table Creation**: "Insert a 3x4 table at index 500 in document `YOUR_GOOGLE_DOC_ID` using the `insertTable` tool."
@@ -329,6 +330,7 @@ When `tabId` is not specified, operations target the first tab (or the legacy do
 - **Legacy Formatting**: "Use `formatMatchingText` to find the second instance of 'Project Alpha' and make it blue (#0000FF) in doc `YOUR_GOOGLE_DOC_ID`."
 
 **Google Sheets:**
+
 - **Read Data**: "Read range A1:B10 from spreadsheet `YOUR_SPREADSHEET_ID` using `readSpreadsheet`."
 - **Write Data**: "Write data [[1, 2], [3, 4]] to range A1:B2 in spreadsheet `YOUR_SPREADSHEET_ID`."
 - **Append Rows**: "Append rows [[5, 6], [7, 8]] to spreadsheet `YOUR_SPREADSHEET_ID` starting at A1."
@@ -339,6 +341,7 @@ When `tabId` is not specified, operations target the first tab (or the legacy do
 - **List Spreadsheets**: "List all my Google Spreadsheets modified in the last 30 days."
 
 Remember to replace:
+
 - `YOUR_GOOGLE_DOC_ID` with the actual ID from a Google Doc's URL (the long string between `/d/` and `/edit`)
 - `YOUR_SPREADSHEET_ID` with the actual ID from a Google Sheet's URL (the long string between `/d/` and `/edit`)
 
@@ -431,6 +434,7 @@ All tab-related features have been validated with real Google Docs containing mu
 ### A1 Notation
 
 Google Sheets uses A1 notation to specify ranges. Examples:
+
 - `A1` - Single cell
 - `A1:B10` - Range from A1 to B10
 - `Sheet1!A1:B10` - Range on a specific sheet named "Sheet1"
@@ -440,6 +444,7 @@ Google Sheets uses A1 notation to specify ranges. Examples:
 ### Value Input Options
 
 When writing data to spreadsheets, you can choose how values are interpreted:
+
 - **USER_ENTERED** (default): Values are parsed as if typed by a user (formulas work, dates are recognized, etc.)
 - **RAW**: Values are stored exactly as provided (no parsing)
 

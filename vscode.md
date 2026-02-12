@@ -104,12 +104,14 @@ Once configured, you can use the MCP server with AI assistants in VS Code:
 The server provides these tools in VS Code:
 
 ### Document Discovery
+
 - `listGoogleDocs` - List documents with filtering
 - `searchGoogleDocs` - Search by name/content
 - `getRecentGoogleDocs` - Get recently modified docs
 - `getDocumentInfo` - Get detailed document metadata
 
 ### Document Editing
+
 - `readGoogleDoc` - Read document content
 - `appendToGoogleDoc` - Add text to end
 - `insertText` - Insert at specific position
@@ -121,6 +123,7 @@ The server provides these tools in VS Code:
 - `insertPageBreak` - Add page breaks
 
 ### File Management
+
 - `createFolder` - Create new folders
 - `listFolderContents` - List folder contents
 - `getFolderInfo` - Get folder metadata

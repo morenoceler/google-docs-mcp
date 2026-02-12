@@ -21,11 +21,11 @@ export interface ParsedMarkdown {
  */
 export function createMarkdownParser(): MarkdownIt {
   const md = new MarkdownIt({
-    html: false,        // Security: don't allow raw HTML
-    linkify: true,      // Auto-convert URLs to links
+    html: false, // Security: don't allow raw HTML
+    linkify: true, // Auto-convert URLs to links
     typographer: false, // Don't convert quotes/dashes
-    breaks: false,      // Require two spaces for line breaks
-    xhtmlOut: false     // Don't use XHTML style
+    breaks: false, // Require two spaces for line breaks
+    xhtmlOut: false, // Don't use XHTML style
   });
 
   // markdown-it has built-in support for:
@@ -51,8 +51,8 @@ export function parseMarkdown(markdown: string): ParsedMarkdown {
       paragraphs: 0,
       lists: 0,
       tables: 0,
-      links: 0
-    }
+      links: 0,
+    },
   };
 
   for (const token of tokens) {
@@ -71,7 +71,7 @@ export function parseMarkdown(markdown: string): ParsedMarkdown {
 
   return {
     tokens,
-    metadata
+    metadata,
   };
 }
 

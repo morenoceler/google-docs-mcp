@@ -2,7 +2,10 @@
 import { docs_v1 } from 'googleapis';
 import type Token from 'markdown-it/lib/token.mjs';
 import { parseMarkdown, getLinkHref, getHeadingLevel } from './markdownParser.js';
-import { buildUpdateTextStyleRequest, buildUpdateParagraphStyleRequest } from './googleDocsApiHelpers.js';
+import {
+  buildUpdateTextStyleRequest,
+  buildUpdateParagraphStyleRequest,
+} from './googleDocsApiHelpers.js';
 import { MarkdownConversionError } from './types.js';
 
 // --- Internal Types ---
@@ -18,6 +21,7 @@ interface FormattingState {
   italic?: boolean;
   strikethrough?: boolean;
   link?: string;
+  code?: boolean;
 }
 
 interface ParagraphRange {
@@ -29,15 +33,14 @@ interface ParagraphRange {
 interface ListState {
   type: 'bullet' | 'ordered';
   level: number;
-  listId?: string;
 }
 
 interface PendingListItem {
   startIndex: number;
   endIndex?: number;
-  listId: string;
   nestingLevel: number;
-  isOrdered: boolean;
+  bulletPreset: 'NUMBERED_DECIMAL_ALPHA_ROMAN' | 'BULLET_DISC_CIRCLE_SQUARE' | 'BULLET_CHECKBOX';
+  taskPrefixProcessed: boolean;
 }
 
 interface ConversionContext {
@@ -49,11 +52,16 @@ interface ConversionContext {
   listStack: ListState[];
   paragraphRanges: ParagraphRange[];
   pendingListItems: PendingListItem[];
-  listIds: Map<string, string>; // Maps list type+level to listId
+  openListItemStack: number[];
+  hrRanges: { startIndex: number; endIndex: number }[];
   tabId?: string;
   currentParagraphStart?: number;
   currentHeadingLevel?: number;
 }
+
+const CODE_FONT_FAMILY = 'Roboto Mono';
+const CODE_TEXT_HEX = '#188038';
+const CODE_BACKGROUND_HEX = '#F1F3F4';
 
 // --- Main Conversion Function ---
 
@@ -85,8 +93,9 @@ export function convertMarkdownToRequests(
     listStack: [],
     paragraphRanges: [],
     pendingListItems: [],
-    listIds: new Map(),
-    tabId
+    openListItemStack: [],
+    hrRanges: [],
+    tabId,
   };
 
   try {
@@ -132,8 +141,10 @@ function processToken(token: Token, context: ConversionContext): void {
 
     // Text content
     case 'text':
-    case 'code_inline':
       handleTextToken(token, context);
+      break;
+    case 'code_inline':
+      handleCodeInlineToken(token, context);
       break;
 
     // Inline formatting
@@ -173,7 +184,7 @@ function processToken(token: Token, context: ConversionContext): void {
     case 'bullet_list_open':
       context.listStack.push({
         type: 'bullet',
-        level: context.listStack.length
+        level: context.listStack.length,
       });
       break;
     case 'bullet_list_close':
@@ -183,7 +194,7 @@ function processToken(token: Token, context: ConversionContext): void {
     case 'ordered_list_open':
       context.listStack.push({
         type: 'ordered',
-        level: context.listStack.length
+        level: context.listStack.length,
       });
       break;
     case 'ordered_list_close':
@@ -234,9 +245,13 @@ function processToken(token: Token, context: ConversionContext): void {
     case 'table_close':
     case 'fence':
     case 'code_block':
+      handleCodeBlockToken(token, context);
+      break;
+    case 'hr':
+      handleHorizontalRule(context);
+      break;
     case 'blockquote_open':
     case 'blockquote_close':
-    case 'hr':
       // Skip for now - can be added in future enhancements
       break;
 
@@ -262,7 +277,7 @@ function handleHeadingClose(context: ConversionContext): void {
     context.paragraphRanges.push({
       startIndex: context.currentParagraphStart,
       endIndex: context.currentIndex,
-      namedStyleType: headingStyleType
+      namedStyleType: headingStyleType,
     });
 
     // Add newline after heading
@@ -271,6 +286,24 @@ function handleHeadingClose(context: ConversionContext): void {
     context.currentHeadingLevel = undefined;
     context.currentParagraphStart = undefined;
   }
+}
+
+// --- Horizontal Rule Handler ---
+
+function handleHorizontalRule(context: ConversionContext): void {
+  // Ensure separation from previous content
+  if (!lastInsertEndsWithNewline(context)) {
+    insertText('\n', context);
+  }
+
+  // Insert an empty paragraph that will carry the bottom border
+  const start = context.currentIndex;
+  insertText('\n', context);
+
+  context.hrRanges.push({
+    startIndex: start,
+    endIndex: context.currentIndex,
+  });
 }
 
 // --- Paragraph Handlers ---
@@ -283,12 +316,25 @@ function handleParagraphOpen(context: ConversionContext): void {
 }
 
 function handleParagraphClose(context: ConversionContext): void {
-  // Skip if we're in a list
   if (context.listStack.length === 0) {
-    // Add double newline after paragraph for spacing
+    // Add double newline after non-list paragraphs for spacing.
     insertText('\n\n', context);
-    context.currentParagraphStart = undefined;
+  } else if (!lastInsertEndsWithNewline(context)) {
+    // End each list paragraph explicitly so nested list items don't collapse
+    // into their parent item text.
+    insertText('\n', context);
   }
+
+  const currentListItem = getCurrentOpenListItem(context);
+  if (currentListItem) {
+    const paragraphEndIndex = lastInsertEndsWithNewline(context)
+      ? context.currentIndex - 1
+      : context.currentIndex;
+    if (paragraphEndIndex > currentListItem.startIndex) {
+      currentListItem.endIndex = paragraphEndIndex;
+    }
+  }
+  context.currentParagraphStart = undefined;
 }
 
 // --- List Handlers ---
@@ -299,33 +345,41 @@ function handleListItemOpen(context: ConversionContext): void {
   }
 
   const currentList = context.listStack[context.listStack.length - 1];
-  const listKey = `${currentList.type}_${currentList.level}`;
+  const itemStart = context.currentIndex;
 
-  // Get or create list ID
-  if (!context.listIds.has(listKey)) {
-    // Generate a unique list ID
-    const listId = `list_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    context.listIds.set(listKey, listId);
+  // Docs API uses leading tabs to infer list nesting levels.
+  if (currentList.level > 0) {
+    insertText('\t'.repeat(currentList.level), context);
   }
 
-  const listId = context.listIds.get(listKey)!;
-
-  // Track the start of this list item
-  const itemStart = context.currentIndex;
-  context.pendingListItems.push({
+  const listItem: PendingListItem = {
     startIndex: itemStart,
-    listId,
     nestingLevel: currentList.level,
-    isOrdered: currentList.type === 'ordered'
-  });
+    bulletPreset:
+      currentList.type === 'ordered' ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE',
+    taskPrefixProcessed: false,
+  };
+  context.pendingListItems.push(listItem);
+  context.openListItemStack.push(context.pendingListItems.length - 1);
 }
 
 function handleListItemClose(context: ConversionContext): void {
-  if (context.pendingListItems.length > 0) {
-    const lastItem = context.pendingListItems[context.pendingListItems.length - 1];
-    lastItem.endIndex = context.currentIndex;
+  const openIndex = context.openListItemStack.pop();
+  if (openIndex === undefined) {
+    return;
+  }
 
-    // Add newline after list item
+  const listItem = context.pendingListItems[openIndex];
+  if (listItem.endIndex === undefined) {
+    const computedEndIndex = lastInsertEndsWithNewline(context)
+      ? context.currentIndex - 1
+      : context.currentIndex;
+    if (computedEndIndex > listItem.startIndex) {
+      listItem.endIndex = computedEndIndex;
+    }
+  }
+
+  if (!lastInsertEndsWithNewline(context)) {
     insertText('\n', context);
   }
 }
@@ -333,8 +387,19 @@ function handleListItemClose(context: ConversionContext): void {
 // --- Text Handling ---
 
 function handleTextToken(token: Token, context: ConversionContext): void {
-  const text = token.content;
+  let text = token.content;
   if (!text) return;
+
+  const currentListItem = getCurrentOpenListItem(context);
+  if (currentListItem && !currentListItem.taskPrefixProcessed) {
+    currentListItem.taskPrefixProcessed = true;
+    const taskPrefixMatch = text.match(/^\[( |x|X)\]\s+/);
+    if (taskPrefixMatch) {
+      currentListItem.bulletPreset = 'BULLET_CHECKBOX';
+      text = text.slice(taskPrefixMatch[0].length);
+      if (!text) return;
+    }
+  }
 
   const startIndex = context.currentIndex;
   const endIndex = startIndex + text.length;
@@ -348,8 +413,46 @@ function handleTextToken(token: Token, context: ConversionContext): void {
     context.textRanges.push({
       startIndex,
       endIndex,
-      formatting: currentFormatting
+      formatting: currentFormatting,
     });
+  }
+}
+
+function handleCodeInlineToken(token: Token, context: ConversionContext): void {
+  context.formattingStack.push({ code: true });
+  handleTextToken(token, context);
+  popFormatting(context, 'code');
+}
+
+function handleCodeBlockToken(token: Token, context: ConversionContext): void {
+  const normalizedContent = token.content.endsWith('\n')
+    ? token.content.slice(0, -1)
+    : token.content;
+  const lines = normalizedContent.length > 0 ? normalizedContent.split('\n') : [''];
+
+  for (const line of lines) {
+    const startIndex = context.currentIndex;
+    if (line.length > 0) {
+      insertText(line, context);
+      context.textRanges.push({
+        startIndex,
+        endIndex: context.currentIndex,
+        formatting: { code: true },
+      });
+    } else {
+      // Keep blank lines inside fenced blocks visible.
+      insertText(' ', context);
+      context.textRanges.push({
+        startIndex,
+        endIndex: context.currentIndex,
+        formatting: { code: true },
+      });
+    }
+    insertText('\n', context);
+  }
+
+  if (!lastInsertEndsWithDoubleNewline(context)) {
+    insertText('\n', context);
   }
 }
 
@@ -362,8 +465,8 @@ function insertText(text: string, context: ConversionContext): void {
   context.insertRequests.push({
     insertText: {
       location,
-      text
-    }
+      text,
+    },
   });
 
   context.currentIndex += text.length;
@@ -378,6 +481,7 @@ function mergeFormattingStack(stack: FormattingState[]): FormattingState {
     if (state.bold !== undefined) merged.bold = state.bold;
     if (state.italic !== undefined) merged.italic = state.italic;
     if (state.strikethrough !== undefined) merged.strikethrough = state.strikethrough;
+    if (state.code !== undefined) merged.code = state.code;
     if (state.link !== undefined) merged.link = state.link;
   }
 
@@ -385,10 +489,13 @@ function mergeFormattingStack(stack: FormattingState[]): FormattingState {
 }
 
 function hasFormatting(formatting: FormattingState): boolean {
-  return formatting.bold === true ||
-         formatting.italic === true ||
-         formatting.strikethrough === true ||
-         formatting.link !== undefined;
+  return (
+    formatting.bold === true ||
+    formatting.italic === true ||
+    formatting.strikethrough === true ||
+    formatting.code === true ||
+    formatting.link !== undefined
+  );
 }
 
 function popFormatting(context: ConversionContext, type: keyof FormattingState): void {
@@ -408,21 +515,29 @@ function finalizeFormatting(context: ConversionContext): void {
   for (const range of context.textRanges) {
     const rangeLocation: docs_v1.Schema$Range = {
       startIndex: range.startIndex,
-      endIndex: range.endIndex
+      endIndex: range.endIndex,
     };
     if (context.tabId) {
       rangeLocation.tabId = context.tabId;
     }
 
-    // Apply text style (bold, italic, strikethrough)
-    if (range.formatting.bold || range.formatting.italic || range.formatting.strikethrough) {
+    // Apply text style (bold, italic, strikethrough, inline/block code).
+    if (
+      range.formatting.bold ||
+      range.formatting.italic ||
+      range.formatting.strikethrough ||
+      range.formatting.code
+    ) {
       const styleRequest = buildUpdateTextStyleRequest(
         range.startIndex,
         range.endIndex,
         {
           bold: range.formatting.bold,
           italic: range.formatting.italic,
-          strikethrough: range.formatting.strikethrough
+          strikethrough: range.formatting.strikethrough,
+          fontFamily: range.formatting.code ? CODE_FONT_FAMILY : undefined,
+          foregroundColor: range.formatting.code ? CODE_TEXT_HEX : undefined,
+          backgroundColor: range.formatting.code ? CODE_BACKGROUND_HEX : undefined,
         },
         context.tabId
       );
@@ -460,29 +575,74 @@ function finalizeFormatting(context: ConversionContext): void {
     }
   }
 
-  // Apply list formatting
-  for (const listItem of context.pendingListItems) {
-    if (listItem.endIndex !== undefined) {
+  // Apply horizontal rule styling (bottom border on empty paragraphs)
+  for (const hrRange of context.hrRanges) {
+    const range: docs_v1.Schema$Range = {
+      startIndex: hrRange.startIndex,
+      endIndex: hrRange.endIndex,
+    };
+    if (context.tabId) {
+      range.tabId = context.tabId;
+    }
+
+    context.formatRequests.push({
+      updateParagraphStyle: {
+        range,
+        paragraphStyle: {
+          borderBottom: {
+            color: {
+              color: { rgbColor: { red: 0.75, green: 0.75, blue: 0.75 } },
+            },
+            width: { magnitude: 1, unit: 'PT' },
+            padding: { magnitude: 6, unit: 'PT' },
+            dashStyle: 'SOLID',
+          },
+        },
+        fields: 'borderBottom',
+      },
+    });
+  }
+
+  // Apply list formatting from bottom-to-top so index shifts from tab
+  // consumption do not invalidate later requests.
+  const listItemsForFormatting = context.pendingListItems
+    .filter(
+      (listItem) => listItem.endIndex !== undefined && listItem.endIndex > listItem.startIndex
+    )
+    .sort((a, b) => b.startIndex - a.startIndex);
+
+  for (const listItem of listItemsForFormatting) {
+    if (listItem.endIndex !== undefined && listItem.endIndex > listItem.startIndex) {
       const rangeLocation: docs_v1.Schema$Range = {
         startIndex: listItem.startIndex,
-        endIndex: listItem.endIndex
+        endIndex: listItem.endIndex,
       };
       if (context.tabId) {
         rangeLocation.tabId = context.tabId;
       }
 
-      const bulletPreset = listItem.isOrdered
-        ? 'NUMBERED_DECIMAL_ALPHA_ROMAN'
-        : 'BULLET_DISC_CIRCLE_SQUARE';
-
       context.formatRequests.push({
         createParagraphBullets: {
           range: rangeLocation,
-          bulletPreset,
-          // Note: Google Docs API automatically manages nesting levels
-          // We include nestingLevel but the API may adjust it
-        }
+          bulletPreset: listItem.bulletPreset,
+        },
       });
     }
   }
+}
+
+function getCurrentOpenListItem(context: ConversionContext): PendingListItem | null {
+  const openIndex = context.openListItemStack[context.openListItemStack.length - 1];
+  if (openIndex === undefined) return null;
+  return context.pendingListItems[openIndex] ?? null;
+}
+
+function lastInsertEndsWithNewline(context: ConversionContext): boolean {
+  const lastInsert = context.insertRequests[context.insertRequests.length - 1]?.insertText?.text;
+  return Boolean(lastInsert && lastInsert.endsWith('\n'));
+}
+
+function lastInsertEndsWithDoubleNewline(context: ConversionContext): boolean {
+  const lastInsert = context.insertRequests[context.insertRequests.length - 1]?.insertText?.text;
+  return Boolean(lastInsert && lastInsert.endsWith('\n\n'));
 }

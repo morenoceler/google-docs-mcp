@@ -4,17 +4,21 @@ FastMCP server with 44 tools for Google Docs, Sheets, and Drive.
 
 ## Tool Categories
 
-| Category | Count | Examples |
-|----------|-------|----------|
-| Docs | 5 | `readGoogleDoc`, `appendToGoogleDoc`, `insertText`, `deleteRange`, `listDocumentTabs` |
-| Markdown | 2 | `replaceDocumentWithMarkdown`, `appendMarkdownToGoogleDoc` |
-| Formatting | 3 | `applyTextStyle`, `applyParagraphStyle`, `formatMatchingText` |
-| Structure | 7 | `insertTable`, `insertPageBreak`, `insertImageFromUrl`, `insertLocalImage`, `editTableCell`, `findElement`*, `fixListFormatting`* |
-| Comments | 6 | `listComments`, `getComment`, `addComment`, `replyToComment`, `resolveComment`, `deleteComment` |
-| Sheets | 8 | `readSpreadsheet`, `writeSpreadsheet`, `appendSpreadsheetRows`, `clearSpreadsheetRange`, `createSpreadsheet`, `listGoogleSheets` |
-| Drive | 13 | `listGoogleDocs`, `searchGoogleDocs`, `getDocumentInfo`, `createFolder`, `moveFile`, `copyFile`, `createDocument` |
+| Category   | Count | Examples                                                                                                                            |
+| ---------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Docs       | 5     | `readGoogleDoc`, `appendToGoogleDoc`, `insertText`, `deleteRange`, `listDocumentTabs`                                               |
+| Markdown   | 2     | `replaceDocumentWithMarkdown`, `appendMarkdownToGoogleDoc`                                                                          |
+| Formatting | 3     | `applyTextStyle`, `applyParagraphStyle`, `formatMatchingText`                                                                       |
+| Structure  | 7     | `insertTable`, `insertPageBreak`, `insertImageFromUrl`, `insertLocalImage`, `editTableCell`_, `findElement`_, `fixListFormatting`\* |
+| Comments   | 6     | `listComments`, `getComment`, `addComment`, `replyToComment`, `resolveComment`, `deleteComment`                                     |
+| Sheets     | 8     | `readSpreadsheet`, `writeSpreadsheet`, `appendSpreadsheetRows`, `clearSpreadsheetRange`, `createSpreadsheet`, `listGoogleSheets`    |
+| Drive      | 13    | `listGoogleDocs`, `searchGoogleDocs`, `getDocumentInfo`, `createFolder`, `moveFile`, `copyFile`, `createDocument`                   |
 
-*Not fully implemented
+\*Not fully implemented
+
+## Shared Drives Support
+
+The server supports Google Shared Drives. All Drive file operations (`files.list`, `files.get`, `files.create`, `files.update`, `files.copy`, `files.delete`, `permissions.create`) use `supportsAllDrives: true` and `includeItemsFromAllDrives: true` (for list operations), enabling agents to query, create, and update documents in shared drives.
 
 ## Known Limitations
 
@@ -34,11 +38,13 @@ FastMCP server with 44 tools for Google Docs, Sheets, and Drive.
 ## Markdown Support
 
 ### Workflow
+
 1. **Retrieve**: Use `readGoogleDoc` with `format='markdown'` to get document content as markdown
 2. **Edit**: Modify markdown locally using your preferred editor
 3. **Apply**: Use `replaceDocumentWithMarkdown` or `appendMarkdownToGoogleDoc` to write changes back
 
 ### Supported Markdown Features
+
 - **Headings**: `# H1` through `###### H6`
 - **Bold**: `**bold**` or `__bold__`
 - **Italic**: `*italic*` or `_italic_`
@@ -50,15 +56,18 @@ FastMCP server with 44 tools for Google Docs, Sheets, and Drive.
 ### Markdown Tools
 
 #### `replaceDocumentWithMarkdown`
+
 Replaces entire document content with markdown-formatted content.
 
 **Parameters:**
+
 - `documentId`: The document ID
 - `markdown`: The markdown content to apply
 - `preserveTitle` (optional): If true, preserves the first heading/title
 - `tabId` (optional): Target a specific tab
 
 **Example:**
+
 ```markdown
 # My Document
 
@@ -70,19 +79,22 @@ This is **bold** text with a [link](https://example.com).
 
 ## Section 2
 
-More content with *italic* and ~~strikethrough~~.
+More content with _italic_ and ~~strikethrough~~.
 ```
 
 #### `appendMarkdownToGoogleDoc`
+
 Appends markdown content to the end of a document with full formatting.
 
 **Parameters:**
+
 - `documentId`: The document ID
 - `markdown`: The markdown content to append
 - `addNewlineIfNeeded` (optional, default: true): Add spacing before appended content
 - `tabId` (optional): Target a specific tab
 
 ### Known Limitations for Markdown
+
 - Tables not yet supported in markdown-to-docs conversion
 - Images not yet supported in markdown-to-docs conversion
 - Complex nested lists (3+ levels) may have formatting quirks
@@ -90,14 +102,14 @@ Appends markdown content to the end of a document with full formatting.
 
 ## Source Files (for implementation details)
 
-| File | Contains |
-|------|----------|
-| `src/types.ts` | Zod schemas, hex color validation, style parameter definitions |
-| `src/googleDocsApiHelpers.ts` | `findTextRange`, `executeBatchUpdate`, `executeBatchUpdateWithSplitting`, style request builders |
-| `src/googleSheetsApiHelpers.ts` | A1 notation parsing, range operations |
-| `src/markdownParser.ts` | Markdown-it configuration, markdown parsing utilities |
-| `src/markdownToGoogleDocs.ts` | Markdown-to-Google-Docs conversion logic |
-| `src/server.ts` | All 44 tool definitions with full parameter schemas |
+| File                            | Contains                                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/types.ts`                  | Zod schemas, hex color validation, style parameter definitions                                   |
+| `src/googleDocsApiHelpers.ts`   | `findTextRange`, `executeBatchUpdate`, `executeBatchUpdateWithSplitting`, style request builders |
+| `src/googleSheetsApiHelpers.ts` | A1 notation parsing, range operations                                                            |
+| `src/markdownParser.ts`         | Markdown-it configuration, markdown parsing utilities                                            |
+| `src/markdownToGoogleDocs.ts`   | Markdown-to-Google-Docs conversion logic                                                         |
+| `src/server.ts`                 | All 44 tool definitions with full parameter schemas                                              |
 
 ## See Also
 
