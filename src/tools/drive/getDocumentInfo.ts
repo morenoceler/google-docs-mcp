@@ -6,7 +6,7 @@ import { DocumentIdParameter } from '../../types.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'getDocumentInfo',
-    description: 'Gets detailed information about a specific Google Document.',
+    description: 'Gets metadata about a document including its name, owner, sharing status, and modification history.',
     parameters: DocumentIdParameter,
     execute: async (args, { log }) => {
       const drive = await getDriveClient();
@@ -28,38 +28,19 @@ export function register(server: FastMCP) {
           throw new UserError(`Document with ID ${args.documentId} not found.`);
         }
 
-        const createdDate = file.createdTime
-          ? new Date(file.createdTime).toLocaleString()
-          : 'Unknown';
-        const modifiedDate = file.modifiedTime
-          ? new Date(file.modifiedTime).toLocaleString()
-          : 'Unknown';
-        const owner = file.owners?.[0];
-        const lastModifier = file.lastModifyingUser;
-
-        let result = `**Document Information:**\n\n`;
-        result += `**Name:** ${file.name}\n`;
-        result += `**ID:** ${file.id}\n`;
-        result += `**Type:** Google Document\n`;
-        result += `**Created:** ${createdDate}\n`;
-        result += `**Last Modified:** ${modifiedDate}\n`;
-
-        if (owner) {
-          result += `**Owner:** ${owner.displayName} (${owner.emailAddress})\n`;
-        }
-
-        if (lastModifier) {
-          result += `**Last Modified By:** ${lastModifier.displayName} (${lastModifier.emailAddress})\n`;
-        }
-
-        result += `**Shared:** ${file.shared ? 'Yes' : 'No'}\n`;
-        result += `**View Link:** ${file.webViewLink}\n`;
-
-        if (file.description) {
-          result += `**Description:** ${file.description}\n`;
-        }
-
-        return result;
+        const info = {
+          id: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          createdTime: file.createdTime,
+          modifiedTime: file.modifiedTime,
+          owner: file.owners?.[0]?.displayName || null,
+          lastModifyingUser: file.lastModifyingUser?.displayName || null,
+          shared: file.shared || false,
+          url: file.webViewLink,
+          description: file.description || null,
+        };
+        return JSON.stringify(info, null, 2);
       } catch (error: any) {
         log.error(`Error getting document info: ${error.message || error}`);
         if (error.code === 404) throw new UserError(`Document not found (ID: ${args.documentId}).`);

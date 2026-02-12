@@ -9,13 +9,13 @@ import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'insertPageBreak',
-    description: 'Inserts a page break at the specified index.',
+    description: 'Inserts a page break at a character index in the document.',
     parameters: DocumentIdParameter.extend({
       index: z
         .number()
         .int()
         .min(1)
-        .describe('The index (1-based) where the page break should be inserted.'),
+        .describe('1-based character index within the document body. Use readDocument with format=\'json\' to inspect indices.'),
     }),
     execute: async (args, { log }) => {
       const docs = await getDocsClient();

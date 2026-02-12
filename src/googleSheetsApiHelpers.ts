@@ -272,8 +272,109 @@ function parseRange(range: string): { sheetName: string | null; a1Range: string 
 }
 
 /**
- * Formats cells in a range
- * Note: This function requires the sheetId. For simplicity, we'll get it from the spreadsheet metadata.
+ * Resolves a sheet name to a numeric sheet ID.
+ * If sheetName is null/undefined, returns the first sheet's ID.
+ */
+async function resolveSheetId(
+  sheets: Sheets,
+  spreadsheetId: string,
+  sheetName?: string | null
+): Promise<number> {
+  const metadata = await getSpreadsheetMetadata(sheets, spreadsheetId);
+
+  if (sheetName) {
+    const sheet = metadata.sheets?.find((s) => s.properties?.title === sheetName);
+    if (!sheet || sheet.properties?.sheetId === undefined || sheet.properties?.sheetId === null) {
+      throw new UserError(`Sheet "${sheetName}" not found in spreadsheet.`);
+    }
+    return sheet.properties.sheetId;
+  }
+
+  const firstSheet = metadata.sheets?.[0];
+  if (firstSheet?.properties?.sheetId === undefined || firstSheet?.properties?.sheetId === null) {
+    throw new UserError('Spreadsheet has no sheets.');
+  }
+  return firstSheet.properties.sheetId;
+}
+
+/**
+ * Converts column letters to a 0-based column index.
+ * Example: "A" -> 0, "B" -> 1, "Z" -> 25, "AA" -> 26
+ */
+function colLettersToIndex(col: string): number {
+  let index = 0;
+  const upper = col.toUpperCase();
+  for (let i = 0; i < upper.length; i++) {
+    index = index * 26 + (upper.charCodeAt(i) - 64);
+  }
+  return index - 1;
+}
+
+/**
+ * Parses an A1-notation cell range string into a Google Sheets GridRange object.
+ * Supports:
+ *   - Standard: "A1", "A1:B2"
+ *   - Whole rows: "1:1", "1:3"
+ *   - Whole columns: "A:A", "A:C"
+ * When a component is omitted (whole row/column), the corresponding
+ * start/end index is left out of the GridRange, which the Sheets API
+ * interprets as "unbounded" (i.e., the entire row or column).
+ */
+function parseA1ToGridRange(
+  a1Range: string,
+  sheetId: number
+): sheets_v4.Schema$GridRange {
+  // Whole-row pattern: "1:3" or "1"
+  const rowOnlyMatch = a1Range.match(/^(\d+)(?::(\d+))?$/);
+  if (rowOnlyMatch) {
+    const startRow = parseInt(rowOnlyMatch[1], 10) - 1;
+    const endRow = rowOnlyMatch[2] ? parseInt(rowOnlyMatch[2], 10) : startRow + 1;
+    return {
+      sheetId,
+      startRowIndex: startRow,
+      endRowIndex: endRow,
+      // no column indices → entire row
+    };
+  }
+
+  // Whole-column pattern: "A:C" or "A"
+  const colOnlyMatch = a1Range.match(/^([A-Z]+)(?::([A-Z]+))?$/i);
+  if (colOnlyMatch && !/\d/.test(a1Range)) {
+    const startCol = colLettersToIndex(colOnlyMatch[1]);
+    const endCol = colOnlyMatch[2] ? colLettersToIndex(colOnlyMatch[2]) + 1 : startCol + 1;
+    return {
+      sheetId,
+      startColumnIndex: startCol,
+      endColumnIndex: endCol,
+      // no row indices → entire column
+    };
+  }
+
+  // Standard A1 pattern: "A1" or "A1:B2"
+  const standardMatch = a1Range.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i);
+  if (!standardMatch) {
+    throw new UserError(
+      `Invalid range format: "${a1Range}". Expected "A1:B2", "1:1" (whole row), or "A:A" (whole column).`
+    );
+  }
+
+  const startCol = colLettersToIndex(standardMatch[1]);
+  const startRow = parseInt(standardMatch[2], 10) - 1;
+  const endCol = standardMatch[3] ? colLettersToIndex(standardMatch[3]) + 1 : startCol + 1;
+  const endRow = standardMatch[4] ? parseInt(standardMatch[4], 10) : startRow + 1;
+
+  return {
+    sheetId,
+    startRowIndex: startRow,
+    endRowIndex: endRow,
+    startColumnIndex: startCol,
+    endColumnIndex: endCol,
+  };
+}
+
+/**
+ * Formats cells in a range.
+ * Supports standard A1 ranges ("A1:D1"), whole-row ("1:1"), and whole-column ("A:A") notation.
  */
 export async function formatCells(
   sheets: Sheets,
@@ -294,53 +395,11 @@ export async function formatCells(
   try {
     // Parse the range to get sheet name and cell range
     const { sheetName, a1Range } = parseRange(range);
-
-    // Get spreadsheet metadata to find sheetId
-    const metadata = await getSpreadsheetMetadata(sheets, spreadsheetId);
-    let sheetId: number | undefined;
-
-    if (sheetName) {
-      // Find the sheet by name
-      const sheet = metadata.sheets?.find((s) => s.properties?.title === sheetName);
-      if (!sheet || !sheet.properties?.sheetId) {
-        throw new UserError(`Sheet "${sheetName}" not found in spreadsheet.`);
-      }
-      sheetId = sheet.properties.sheetId;
-    } else {
-      // Use the first sheet
-      const firstSheet = metadata.sheets?.[0];
-      if (!firstSheet?.properties?.sheetId) {
-        throw new UserError('Spreadsheet has no sheets.');
-      }
-      sheetId = firstSheet.properties.sheetId;
-    }
-
-    if (sheetId === undefined) {
-      throw new UserError('Could not determine sheet ID.');
-    }
+    const sheetId = await resolveSheetId(sheets, spreadsheetId, sheetName);
 
     // Parse A1 range to get row/column indices
-    const rangeMatch = a1Range.match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/i);
-    if (!rangeMatch) {
-      throw new UserError(`Invalid range format: ${a1Range}. Expected format like "A1" or "A1:B2"`);
-    }
-
-    const startCol = rangeMatch[1].toUpperCase();
-    const startRow = parseInt(rangeMatch[2], 10) - 1; // Convert to 0-based
-    const endCol = rangeMatch[3] ? rangeMatch[3].toUpperCase() : startCol;
-    const endRow = rangeMatch[4] ? parseInt(rangeMatch[4], 10) - 1 : startRow; // Convert to 0-based
-
-    // Convert column letters to 0-based indices
-    function colToIndex(col: string): number {
-      let index = 0;
-      for (let i = 0; i < col.length; i++) {
-        index = index * 26 + (col.charCodeAt(i) - 64);
-      }
-      return index - 1;
-    }
-
-    const startColIndex = colToIndex(startCol);
-    const endColIndex = colToIndex(endCol);
+    // Supports: "A1:B2" (standard), "1:3" (whole rows), "A:C" (whole columns)
+    const gridRange = parseA1ToGridRange(a1Range, sheetId);
 
     const userEnteredFormat: sheets_v4.Schema$CellFormat = {};
 
@@ -388,13 +447,7 @@ export async function formatCells(
         requests: [
           {
             repeatCell: {
-              range: {
-                sheetId: sheetId,
-                startRowIndex: startRow,
-                endRowIndex: endRow + 1, // endRowIndex is exclusive
-                startColumnIndex: startColIndex,
-                endColumnIndex: endColIndex + 1, // endColumnIndex is exclusive
-              },
+              range: gridRange,
               cell: {
                 userEnteredFormat,
               },
@@ -418,6 +471,125 @@ export async function formatCells(
     }
     if (error instanceof UserError) throw error;
     throw new UserError(`Failed to format cells: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Freezes rows and/or columns in a sheet so they remain visible when scrolling.
+ */
+export async function freezeRowsAndColumns(
+  sheets: Sheets,
+  spreadsheetId: string,
+  sheetName?: string | null,
+  frozenRows?: number,
+  frozenColumns?: number
+): Promise<sheets_v4.Schema$BatchUpdateSpreadsheetResponse> {
+  try {
+    const sheetId = await resolveSheetId(sheets, spreadsheetId, sheetName);
+
+    const gridProperties: sheets_v4.Schema$GridProperties = {};
+    const fieldParts: string[] = [];
+
+    if (frozenRows !== undefined) {
+      gridProperties.frozenRowCount = frozenRows;
+      fieldParts.push('gridProperties.frozenRowCount');
+    }
+    if (frozenColumns !== undefined) {
+      gridProperties.frozenColumnCount = frozenColumns;
+      fieldParts.push('gridProperties.frozenColumnCount');
+    }
+
+    const response = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            updateSheetProperties: {
+              properties: {
+                sheetId,
+                gridProperties,
+              },
+              fields: fieldParts.join(','),
+            },
+          },
+        ],
+      },
+    });
+
+    return response.data;
+  } catch (error: any) {
+    if (error.code === 404) {
+      throw new UserError(`Spreadsheet not found (ID: ${spreadsheetId}). Check the ID.`);
+    }
+    if (error.code === 403) {
+      throw new UserError(
+        `Permission denied for spreadsheet (ID: ${spreadsheetId}). Ensure you have write access.`
+      );
+    }
+    if (error instanceof UserError) throw error;
+    throw new UserError(`Failed to freeze rows/columns: ${error.message || 'Unknown error'}`);
+  }
+}
+
+/**
+ * Sets or clears dropdown data validation on a range of cells.
+ * When values are provided, creates a ONE_OF_LIST validation rule.
+ * When values are omitted or empty, clears any existing validation from the range.
+ */
+export async function setDropdownValidation(
+  sheets: Sheets,
+  spreadsheetId: string,
+  range: string,
+  values?: string[],
+  strict: boolean = true,
+  inputMessage?: string
+): Promise<sheets_v4.Schema$BatchUpdateSpreadsheetResponse> {
+  try {
+    const { sheetName, a1Range } = parseRange(range);
+    const sheetId = await resolveSheetId(sheets, spreadsheetId, sheetName);
+    const gridRange = parseA1ToGridRange(a1Range, sheetId);
+
+    const rule =
+      values && values.length > 0
+        ? {
+            condition: {
+              type: 'ONE_OF_LIST' as const,
+              values: values.map((v) => ({ userEnteredValue: v })),
+            },
+            showCustomUi: true,
+            strict,
+            inputMessage: inputMessage || null,
+          }
+        : undefined;
+
+    const response = await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            setDataValidation: {
+              range: gridRange,
+              rule,
+            },
+          },
+        ],
+      },
+    });
+
+    return response.data;
+  } catch (error: any) {
+    if (error.code === 404) {
+      throw new UserError(`Spreadsheet not found (ID: ${spreadsheetId}). Check the ID.`);
+    }
+    if (error.code === 403) {
+      throw new UserError(
+        `Permission denied for spreadsheet (ID: ${spreadsheetId}). Ensure you have write access.`
+      );
+    }
+    if (error instanceof UserError) throw error;
+    throw new UserError(
+      `Failed to set dropdown validation: ${error.message || 'Unknown error'}`
+    );
   }
 }
 

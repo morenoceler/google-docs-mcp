@@ -7,9 +7,9 @@ import * as SheetsHelpers from '../../googleSheetsApiHelpers.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'readSpreadsheet',
-    description: 'Reads data from a specific range in a Google Spreadsheet.',
+    description: 'Reads data from a range in a spreadsheet. Returns rows as arrays. Use A1 notation for the range (e.g., "Sheet1!A1:C10").',
     parameters: z.object({
-      spreadsheetId: z.string().describe('The ID of the Google Spreadsheet (from the URL).'),
+      spreadsheetId: z.string().describe('The spreadsheet ID — the long string between /d/ and /edit in a Google Sheets URL.'),
       range: z.string().describe('A1 notation range to read (e.g., "A1:B10" or "Sheet1!A1:B10").'),
       valueRenderOption: z
         .enum(['FORMATTED_VALUE', 'UNFORMATTED_VALUE', 'FORMULA'])
@@ -24,18 +24,7 @@ export function register(server: FastMCP) {
       try {
         const response = await SheetsHelpers.readRange(sheets, args.spreadsheetId, args.range);
         const values = response.values || [];
-
-        if (values.length === 0) {
-          return `Range ${args.range} is empty or does not exist.`;
-        }
-
-        // Format as a readable table
-        let result = `**Spreadsheet Range:** ${args.range}\n\n`;
-        values.forEach((row, index) => {
-          result += `Row ${index + 1}: ${JSON.stringify(row)}\n`;
-        });
-
-        return result;
+        return JSON.stringify({ range: args.range, values }, null, 2);
       } catch (error: any) {
         log.error(`Error reading spreadsheet ${args.spreadsheetId}: ${error.message || error}`);
         if (error instanceof UserError) throw error;

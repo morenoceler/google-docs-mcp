@@ -9,7 +9,7 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'resolveComment',
     description:
-      'Marks a comment as resolved. NOTE: Due to Google API limitations, the Drive API does not support resolving comments on Google Docs files. This operation will attempt to update the comment but the resolved status may not persist in the UI. Comments can be resolved manually in the Google Docs interface.',
+      'Marks a comment as resolved. Note: resolved status may not persist in the Google Docs UI due to a Drive API limitation.',
     parameters: DocumentIdParameter.extend({
       commentId: z.string().describe('The ID of the comment to resolve'),
     }),

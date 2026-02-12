@@ -1,12 +1,36 @@
-// src/markdownToGoogleDocs.ts
+// src/markdown-transformer/markdownToDocsRequests.ts
 import { docs_v1 } from 'googleapis';
+import MarkdownIt from 'markdown-it';
 import type Token from 'markdown-it/lib/token.mjs';
-import { parseMarkdown, getLinkHref, getHeadingLevel } from './markdownParser.js';
 import {
   buildUpdateTextStyleRequest,
   buildUpdateParagraphStyleRequest,
-} from './googleDocsApiHelpers.js';
-import { MarkdownConversionError } from './types.js';
+} from '../googleDocsApiHelpers.js';
+import { MarkdownConversionError } from '../types.js';
+
+// --- Markdown-it Setup ---
+
+function createParser(): MarkdownIt {
+  return new MarkdownIt({
+    html: false,
+    linkify: true,
+    typographer: false,
+    breaks: false,
+    xhtmlOut: false,
+  });
+}
+
+function getLinkHref(token: Token): string | null {
+  if (token.type !== 'link_open') return null;
+  const hrefAttr = token.attrs?.find((attr: [string, string]) => attr[0] === 'href');
+  return hrefAttr ? hrefAttr[1] : null;
+}
+
+function getHeadingLevel(token: Token): number | null {
+  if (!token.type.startsWith('heading_')) return null;
+  const match = token.tag.match(/h(\d)/);
+  return match ? parseInt(match[1], 10) : null;
+}
 
 // --- Internal Types ---
 
@@ -43,6 +67,11 @@ interface PendingListItem {
   taskPrefixProcessed: boolean;
 }
 
+export interface ConversionOptions {
+  /** Treat the first H1 (`# ...`) as a Google Docs TITLE instead of HEADING_1. Default false. */
+  firstHeadingAsTitle?: boolean;
+}
+
 interface ConversionContext {
   currentIndex: number;
   insertRequests: docs_v1.Schema$Request[];
@@ -57,6 +86,9 @@ interface ConversionContext {
   tabId?: string;
   currentParagraphStart?: number;
   currentHeadingLevel?: number;
+  /** When firstHeadingAsTitle is on, tracks whether the title H1 has been consumed. */
+  titleConsumed: boolean;
+  firstHeadingAsTitle: boolean;
 }
 
 const CODE_FONT_FAMILY = 'Roboto Mono';
@@ -66,23 +98,29 @@ const CODE_BACKGROUND_HEX = '#F1F3F4';
 // --- Main Conversion Function ---
 
 /**
- * Converts markdown text to Google Docs API batch update requests
+ * Converts a markdown string to an array of Google Docs API batch update requests.
+ *
+ * This is an internal function -- callers should use `insertMarkdown()` from
+ * the barrel export instead.
  *
  * @param markdown - The markdown content to convert
  * @param startIndex - The document index where content should be inserted (1-based)
  * @param tabId - Optional tab ID for multi-tab documents
- * @returns Array of Google Docs API requests (insertions + formatting)
+ * @param options - Optional conversion options (e.g. firstHeadingAsTitle)
+ * @returns Array of Google Docs API requests (insertions first, then formatting)
  */
 export function convertMarkdownToRequests(
   markdown: string,
   startIndex: number = 1,
-  tabId?: string
+  tabId?: string,
+  options?: ConversionOptions,
 ): docs_v1.Schema$Request[] {
   if (!markdown || markdown.trim().length === 0) {
     return [];
   }
 
-  const parsed = parseMarkdown(markdown);
+  const parser = createParser();
+  const tokens = parser.parse(markdown, {});
 
   const context: ConversionContext = {
     currentIndex: startIndex,
@@ -96,25 +134,24 @@ export function convertMarkdownToRequests(
     openListItemStack: [],
     hrRanges: [],
     tabId,
+    titleConsumed: false,
+    firstHeadingAsTitle: options?.firstHeadingAsTitle ?? false,
   };
 
   try {
-    // Process all tokens
-    for (const token of parsed.tokens) {
+    for (const token of tokens) {
       processToken(token, context);
     }
 
-    // Finalize any pending formatting
     finalizeFormatting(context);
 
-    // Return all requests: insertions first, then formatting
     return [...context.insertRequests, ...context.formatRequests];
   } catch (error) {
     if (error instanceof MarkdownConversionError) {
       throw error;
     }
     throw new MarkdownConversionError(
-      `Failed to convert markdown: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to convert markdown: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -154,14 +191,12 @@ function processToken(token: Token, context: ConversionContext): void {
     case 'strong_close':
       popFormatting(context, 'bold');
       break;
-
     case 'em_open':
       context.formattingStack.push({ italic: true });
       break;
     case 'em_close':
       popFormatting(context, 'italic');
       break;
-
     case 's_open':
       context.formattingStack.push({ strikethrough: true });
       break;
@@ -170,37 +205,30 @@ function processToken(token: Token, context: ConversionContext): void {
       break;
 
     // Links
-    case 'link_open':
+    case 'link_open': {
       const href = getLinkHref(token);
       if (href) {
         context.formattingStack.push({ link: href });
       }
       break;
+    }
     case 'link_close':
       popFormatting(context, 'link');
       break;
 
     // Lists
     case 'bullet_list_open':
-      context.listStack.push({
-        type: 'bullet',
-        level: context.listStack.length,
-      });
+      context.listStack.push({ type: 'bullet', level: context.listStack.length });
       break;
     case 'bullet_list_close':
       context.listStack.pop();
       break;
-
     case 'ordered_list_open':
-      context.listStack.push({
-        type: 'ordered',
-        level: context.listStack.length,
-      });
+      context.listStack.push({ type: 'ordered', level: context.listStack.length });
       break;
     case 'ordered_list_close':
       context.listStack.pop();
       break;
-
     case 'list_item_open':
       handleListItemOpen(context);
       break;
@@ -208,7 +236,7 @@ function processToken(token: Token, context: ConversionContext): void {
       handleListItemClose(context);
       break;
 
-    // Soft breaks and hard breaks
+    // Breaks
     case 'softbreak':
       insertText(' ', context);
       break;
@@ -216,7 +244,7 @@ function processToken(token: Token, context: ConversionContext): void {
       insertText('\n', context);
       break;
 
-    // Inline elements (like inline code)
+    // Inline container
     case 'inline':
       if (token.children) {
         for (const child of token.children) {
@@ -225,13 +253,8 @@ function processToken(token: Token, context: ConversionContext): void {
       }
       break;
 
-    // Tables (basic support)
+    // Tables (structural tokens we skip through)
     case 'table_open':
-      // Tables are complex - we'll skip for now and add in a future enhancement
-      // throw new MarkdownConversionError('Table conversion not yet implemented');
-      break;
-
-    // Ignore these tokens (structural)
     case 'tbody_open':
     case 'tbody_close':
     case 'thead_open':
@@ -243,20 +266,25 @@ function processToken(token: Token, context: ConversionContext): void {
     case 'td_open':
     case 'td_close':
     case 'table_close':
+      break;
+
+    // Code blocks
     case 'fence':
     case 'code_block':
       handleCodeBlockToken(token, context);
       break;
+
+    // Horizontal rules
     case 'hr':
       handleHorizontalRule(context);
       break;
+
+    // Blockquotes (skip for now)
     case 'blockquote_open':
     case 'blockquote_close':
-      // Skip for now - can be added in future enhancements
       break;
 
     default:
-      // console.warn(`Unhandled token type: ${token.type}`);
       break;
   }
 }
@@ -273,55 +301,51 @@ function handleHeadingOpen(token: Token, context: ConversionContext): void {
 
 function handleHeadingClose(context: ConversionContext): void {
   if (context.currentHeadingLevel && context.currentParagraphStart !== undefined) {
-    const headingStyleType = `HEADING_${context.currentHeadingLevel}`;
+    // When firstHeadingAsTitle is enabled, the very first H1 becomes a TITLE.
+    const useTitle =
+      context.firstHeadingAsTitle &&
+      !context.titleConsumed &&
+      context.currentHeadingLevel === 1;
+
+    if (useTitle) {
+      context.titleConsumed = true;
+    }
+
     context.paragraphRanges.push({
       startIndex: context.currentParagraphStart,
       endIndex: context.currentIndex,
-      namedStyleType: headingStyleType,
+      namedStyleType: useTitle ? 'TITLE' : `HEADING_${context.currentHeadingLevel}`,
     });
 
-    // Add newline after heading
     insertText('\n', context);
-
     context.currentHeadingLevel = undefined;
     context.currentParagraphStart = undefined;
   }
 }
 
-// --- Horizontal Rule Handler ---
+// --- Horizontal Rule ---
 
 function handleHorizontalRule(context: ConversionContext): void {
-  // Ensure separation from previous content
   if (!lastInsertEndsWithNewline(context)) {
     insertText('\n', context);
   }
 
-  // Insert an empty paragraph that will carry the bottom border
   const start = context.currentIndex;
   insertText('\n', context);
 
-  context.hrRanges.push({
-    startIndex: start,
-    endIndex: context.currentIndex,
-  });
+  context.hrRanges.push({ startIndex: start, endIndex: context.currentIndex });
 }
 
 // --- Paragraph Handlers ---
 
 function handleParagraphOpen(context: ConversionContext): void {
-  // Skip if we're in a list - list items handle their own paragraphs
   if (context.listStack.length === 0) {
     context.currentParagraphStart = context.currentIndex;
   }
 }
 
 function handleParagraphClose(context: ConversionContext): void {
-  if (context.listStack.length === 0) {
-    // Add double newline after non-list paragraphs for spacing.
-    insertText('\n\n', context);
-  } else if (!lastInsertEndsWithNewline(context)) {
-    // End each list paragraph explicitly so nested list items don't collapse
-    // into their parent item text.
+  if (!lastInsertEndsWithNewline(context)) {
     insertText('\n', context);
   }
 
@@ -347,7 +371,6 @@ function handleListItemOpen(context: ConversionContext): void {
   const currentList = context.listStack[context.listStack.length - 1];
   const itemStart = context.currentIndex;
 
-  // Docs API uses leading tabs to infer list nesting levels.
   if (currentList.level > 0) {
     insertText('\t'.repeat(currentList.level), context);
   }
@@ -365,9 +388,7 @@ function handleListItemOpen(context: ConversionContext): void {
 
 function handleListItemClose(context: ConversionContext): void {
   const openIndex = context.openListItemStack.pop();
-  if (openIndex === undefined) {
-    return;
-  }
+  if (openIndex === undefined) return;
 
   const listItem = context.pendingListItems[openIndex];
   if (listItem.endIndex === undefined) {
@@ -404,17 +425,11 @@ function handleTextToken(token: Token, context: ConversionContext): void {
   const startIndex = context.currentIndex;
   const endIndex = startIndex + text.length;
 
-  // Insert the text
   insertText(text, context);
 
-  // Track formatting for this range
   const currentFormatting = mergeFormattingStack(context.formattingStack);
   if (hasFormatting(currentFormatting)) {
-    context.textRanges.push({
-      startIndex,
-      endIndex,
-      formatting: currentFormatting,
-    });
+    context.textRanges.push({ startIndex, endIndex, formatting: currentFormatting });
   }
 }
 
@@ -434,20 +449,14 @@ function handleCodeBlockToken(token: Token, context: ConversionContext): void {
     const startIndex = context.currentIndex;
     if (line.length > 0) {
       insertText(line, context);
-      context.textRanges.push({
-        startIndex,
-        endIndex: context.currentIndex,
-        formatting: { code: true },
-      });
     } else {
-      // Keep blank lines inside fenced blocks visible.
       insertText(' ', context);
-      context.textRanges.push({
-        startIndex,
-        endIndex: context.currentIndex,
-        formatting: { code: true },
-      });
     }
+    context.textRanges.push({
+      startIndex,
+      endIndex: context.currentIndex,
+      formatting: { code: true },
+    });
     insertText('\n', context);
   }
 
@@ -456,27 +465,25 @@ function handleCodeBlockToken(token: Token, context: ConversionContext): void {
   }
 }
 
+// --- Insert Helper ---
+
 function insertText(text: string, context: ConversionContext): void {
-  const location: any = { index: context.currentIndex };
+  const location: Record<string, unknown> = { index: context.currentIndex };
   if (context.tabId) {
     location.tabId = context.tabId;
   }
 
   context.insertRequests.push({
-    insertText: {
-      location,
-      text,
-    },
+    insertText: { location: location as docs_v1.Schema$Location, text },
   });
 
   context.currentIndex += text.length;
 }
 
-// --- Formatting Stack Management ---
+// --- Formatting Stack ---
 
 function mergeFormattingStack(stack: FormattingState[]): FormattingState {
   const merged: FormattingState = {};
-
   for (const state of stack) {
     if (state.bold !== undefined) merged.bold = state.bold;
     if (state.italic !== undefined) merged.italic = state.italic;
@@ -484,7 +491,6 @@ function mergeFormattingStack(stack: FormattingState[]): FormattingState {
     if (state.code !== undefined) merged.code = state.code;
     if (state.link !== undefined) merged.link = state.link;
   }
-
   return merged;
 }
 
@@ -499,7 +505,6 @@ function hasFormatting(formatting: FormattingState): boolean {
 }
 
 function popFormatting(context: ConversionContext, type: keyof FormattingState): void {
-  // Find and remove the last formatting state with this type
   for (let i = context.formattingStack.length - 1; i >= 0; i--) {
     if (context.formattingStack[i][type] !== undefined) {
       context.formattingStack.splice(i, 1);
@@ -511,7 +516,7 @@ function popFormatting(context: ConversionContext, type: keyof FormattingState):
 // --- Finalization ---
 
 function finalizeFormatting(context: ConversionContext): void {
-  // Apply character-level formatting
+  // Character-level formatting (bold, italic, strikethrough, code, links)
   for (const range of context.textRanges) {
     const rangeLocation: docs_v1.Schema$Range = {
       startIndex: range.startIndex,
@@ -521,7 +526,6 @@ function finalizeFormatting(context: ConversionContext): void {
       rangeLocation.tabId = context.tabId;
     }
 
-    // Apply text style (bold, italic, strikethrough, inline/block code).
     if (
       range.formatting.bold ||
       range.formatting.italic ||
@@ -539,20 +543,19 @@ function finalizeFormatting(context: ConversionContext): void {
           foregroundColor: range.formatting.code ? CODE_TEXT_HEX : undefined,
           backgroundColor: range.formatting.code ? CODE_BACKGROUND_HEX : undefined,
         },
-        context.tabId
+        context.tabId,
       );
       if (styleRequest) {
         context.formatRequests.push(styleRequest.request);
       }
     }
 
-    // Apply link separately
     if (range.formatting.link) {
       const linkRequest = buildUpdateTextStyleRequest(
         range.startIndex,
         range.endIndex,
         { linkUrl: range.formatting.link },
-        context.tabId
+        context.tabId,
       );
       if (linkRequest) {
         context.formatRequests.push(linkRequest.request);
@@ -560,14 +563,14 @@ function finalizeFormatting(context: ConversionContext): void {
     }
   }
 
-  // Apply paragraph-level formatting (headings)
+  // Paragraph-level formatting (headings)
   for (const paraRange of context.paragraphRanges) {
     if (paraRange.namedStyleType) {
       const paraRequest = buildUpdateParagraphStyleRequest(
         paraRange.startIndex,
         paraRange.endIndex,
         { namedStyleType: paraRange.namedStyleType as any },
-        context.tabId
+        context.tabId,
       );
       if (paraRequest) {
         context.formatRequests.push(paraRequest.request);
@@ -575,7 +578,7 @@ function finalizeFormatting(context: ConversionContext): void {
     }
   }
 
-  // Apply horizontal rule styling (bottom border on empty paragraphs)
+  // Horizontal rule styling (bottom border on empty paragraphs)
   for (const hrRange of context.hrRanges) {
     const range: docs_v1.Schema$Range = {
       startIndex: hrRange.startIndex,
@@ -603,33 +606,56 @@ function finalizeFormatting(context: ConversionContext): void {
     });
   }
 
-  // Apply list formatting from bottom-to-top so index shifts from tab
-  // consumption do not invalidate later requests.
-  const listItemsForFormatting = context.pendingListItems
-    .filter(
-      (listItem) => listItem.endIndex !== undefined && listItem.endIndex > listItem.startIndex
-    )
-    .sort((a, b) => b.startIndex - a.startIndex);
+  // List formatting: merge *adjacent* items of the same bullet type into single
+  // ranges so Google Docs treats them as one list (with sequential numbering).
+  // Items are only merged when they're truly adjacent (gap of at most 1 char
+  // for the newline between them). Separate lists with paragraphs, headings, or
+  // other content between them must NOT be merged, otherwise
+  // createParagraphBullets would turn all intervening content into bullets.
+  const validListItems = context.pendingListItems
+    .filter((item) => item.endIndex !== undefined && item.endIndex > item.startIndex)
+    .sort((a, b) => a.startIndex - b.startIndex);
 
-  for (const listItem of listItemsForFormatting) {
-    if (listItem.endIndex !== undefined && listItem.endIndex > listItem.startIndex) {
-      const rangeLocation: docs_v1.Schema$Range = {
-        startIndex: listItem.startIndex,
-        endIndex: listItem.endIndex,
-      };
-      if (context.tabId) {
-        rangeLocation.tabId = context.tabId;
-      }
-
-      context.formatRequests.push({
-        createParagraphBullets: {
-          range: rangeLocation,
-          bulletPreset: listItem.bulletPreset,
-        },
+  const mergedListRanges: { startIndex: number; endIndex: number; bulletPreset: string }[] = [];
+  for (const item of validListItems) {
+    const last = mergedListRanges[mergedListRanges.length - 1];
+    if (
+      last &&
+      last.bulletPreset === item.bulletPreset &&
+      item.startIndex <= last.endIndex + 1
+    ) {
+      last.endIndex = Math.max(last.endIndex, item.endIndex!);
+    } else {
+      mergedListRanges.push({
+        startIndex: item.startIndex,
+        endIndex: item.endIndex!,
+        bulletPreset: item.bulletPreset,
       });
     }
   }
+
+  // Apply bottom-to-top to avoid index shifts from tab consumption
+  mergedListRanges.sort((a, b) => b.startIndex - a.startIndex);
+
+  for (const merged of mergedListRanges) {
+    const rangeLocation: docs_v1.Schema$Range = {
+      startIndex: merged.startIndex,
+      endIndex: merged.endIndex,
+    };
+    if (context.tabId) {
+      rangeLocation.tabId = context.tabId;
+    }
+
+    context.formatRequests.push({
+      createParagraphBullets: {
+        range: rangeLocation,
+        bulletPreset: merged.bulletPreset,
+      },
+    });
+  }
 }
+
+// --- Utility ---
 
 function getCurrentOpenListItem(context: ConversionContext): PendingListItem | null {
   const openIndex = context.openListItemStack[context.openListItemStack.length - 1];

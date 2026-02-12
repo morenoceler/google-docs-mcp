@@ -5,8 +5,8 @@ import { getDriveClient } from '../../clients.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'listGoogleSheets',
-    description: 'Lists Google Spreadsheets from your Google Drive with optional filtering.',
+    name: 'listSpreadsheets',
+    description: 'Lists spreadsheets in your Drive, optionally filtered by name or content.',
     parameters: z.object({
       maxResults: z
         .number()
@@ -51,24 +51,14 @@ export function register(server: FastMCP) {
 
         const files = response.data.files || [];
 
-        if (files.length === 0) {
-          return 'No Google Spreadsheets found matching your criteria.';
-        }
-
-        let result = `Found ${files.length} Google Spreadsheet(s):\n\n`;
-        files.forEach((file, index) => {
-          const modifiedDate = file.modifiedTime
-            ? new Date(file.modifiedTime).toLocaleDateString()
-            : 'Unknown';
-          const owner = file.owners?.[0]?.displayName || 'Unknown';
-          result += `${index + 1}. **${file.name}**\n`;
-          result += `   ID: ${file.id}\n`;
-          result += `   Modified: ${modifiedDate}\n`;
-          result += `   Owner: ${owner}\n`;
-          result += `   Link: ${file.webViewLink}\n\n`;
-        });
-
-        return result;
+        const spreadsheets = files.map((file) => ({
+          id: file.id,
+          name: file.name,
+          modifiedTime: file.modifiedTime,
+          owner: file.owners?.[0]?.displayName || null,
+          url: file.webViewLink,
+        }));
+        return JSON.stringify({ spreadsheets }, null, 2);
       } catch (error: any) {
         log.error(`Error listing Google Sheets: ${error.message || error}`);
         if (error.code === 403)

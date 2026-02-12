@@ -8,7 +8,7 @@ import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'insertTable',
-    description: 'Inserts a new table with the specified dimensions at a given index.',
+    description: 'Inserts an empty table with the specified number of rows and columns at a character index in the document.',
     parameters: DocumentIdParameter.extend({
       rows: z.number().int().min(1).describe('Number of rows for the new table.'),
       columns: z.number().int().min(1).describe('Number of columns for the new table.'),
@@ -16,7 +16,7 @@ export function register(server: FastMCP) {
         .number()
         .int()
         .min(1)
-        .describe('The index (1-based) where the table should be inserted.'),
+        .describe('1-based character index within the document body. Use readDocument with format=\'json\' to inspect indices.'),
     }),
     execute: async (args, { log }) => {
       const docs = await getDocsClient();

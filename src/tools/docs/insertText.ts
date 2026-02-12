@@ -10,14 +10,14 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'insertText',
     description:
-      'Inserts text at a specific index within the document body or a specific tab.',
+      'Inserts text at a specific character index within a document. Use readDocument with format=\'json\' to determine the correct index.',
     parameters: DocumentIdParameter.extend({
-      textToInsert: z.string().min(1).describe('The text to insert.'),
+      text: z.string().min(1).describe('The text to insert.'),
       index: z
         .number()
         .int()
         .min(1)
-        .describe('The index (1-based) where the text should be inserted.'),
+        .describe('1-based character index within the document body. Use readDocument with format=\'json\' to inspect indices.'),
       tabId: z
         .string()
         .optional()
@@ -53,7 +53,7 @@ export function register(server: FastMCP) {
           // Insert with tabId
           const location: any = { index: args.index, tabId: args.tabId };
           const request: docs_v1.Schema$Request = {
-            insertText: { location, text: args.textToInsert },
+            insertText: { location, text: args.text },
           };
           await GDocsHelpers.executeBatchUpdate(docs, args.documentId, [
             request,
@@ -63,7 +63,7 @@ export function register(server: FastMCP) {
           await GDocsHelpers.insertText(
             docs,
             args.documentId,
-            args.textToInsert,
+            args.text,
             args.index
           );
         }

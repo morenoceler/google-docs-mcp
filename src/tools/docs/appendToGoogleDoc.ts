@@ -8,10 +8,10 @@ import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'appendToGoogleDoc',
-    description: 'Appends text to the very end of a specific Google Document or tab.',
+    name: 'appendText',
+    description: 'Appends plain text to the end of a document. For formatted content, use appendMarkdown instead.',
     parameters: DocumentIdParameter.extend({
-      textToAppend: z.string().min(1).describe('The text to add to the end.'),
+      text: z.string().min(1).describe('The plain text to append to the end of the document.'),
       addNewlineIfNeeded: z
         .boolean()
         .optional()
@@ -76,7 +76,7 @@ export function register(server: FastMCP) {
         // Simpler approach: Always assume insertion is needed unless explicitly told not to add newline
         const textToInsert =
           (args.addNewlineIfNeeded && endIndex > 1 ? '\n' : '') +
-          args.textToAppend;
+          args.text;
 
         if (!textToInsert) return 'Nothing to append.';
 

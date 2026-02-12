@@ -8,7 +8,7 @@ import * as SheetsHelpers from '../../googleSheetsApiHelpers.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'createSpreadsheet',
-    description: 'Creates a new Google Spreadsheet.',
+    description: 'Creates a new spreadsheet. Optionally places it in a specific folder and populates it with initial data.',
     parameters: z.object({
       title: z.string().min(1).describe('Title for the new spreadsheet.'),
       parentFolderId: z
@@ -51,7 +51,7 @@ export function register(server: FastMCP) {
           throw new UserError('Failed to create spreadsheet - no ID returned.');
         }
 
-        let result = `Successfully created spreadsheet "${driveResponse.data.name}" (ID: ${spreadsheetId})\nView Link: ${driveResponse.data.webViewLink}`;
+        let initialDataStatus: string | undefined;
 
         // Add initial data if provided
         if (args.initialData && args.initialData.length > 0) {
@@ -63,14 +63,19 @@ export function register(server: FastMCP) {
               args.initialData,
               'USER_ENTERED'
             );
-            result += `\n\nInitial data added to the spreadsheet.`;
+            initialDataStatus = 'added';
           } catch (contentError: any) {
             log.warn(`Spreadsheet created but failed to add initial data: ${contentError.message}`);
-            result += `\n\nSpreadsheet created but failed to add initial data. You can add data manually.`;
+            initialDataStatus = 'failed';
           }
         }
 
-        return result;
+        return JSON.stringify({
+          id: spreadsheetId,
+          name: driveResponse.data.name,
+          url: driveResponse.data.webViewLink,
+          ...(initialDataStatus ? { initialData: initialDataStatus } : {}),
+        }, null, 2);
       } catch (error: any) {
         log.error(`Error creating spreadsheet: ${error.message || error}`);
         if (error.code === 404) throw new UserError('Parent folder not found. Check the folder ID.');

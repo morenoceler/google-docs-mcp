@@ -6,10 +6,10 @@ import * as SheetsHelpers from '../../googleSheetsApiHelpers.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'clearSpreadsheetRange',
-    description: 'Clears all values from a specific range in a Google Spreadsheet.',
+    name: 'clearRange',
+    description: 'Clears all cell values in a range without deleting the cells themselves. Formatting is preserved.',
     parameters: z.object({
-      spreadsheetId: z.string().describe('The ID of the Google Spreadsheet (from the URL).'),
+      spreadsheetId: z.string().describe('The spreadsheet ID — the long string between /d/ and /edit in a Google Sheets URL.'),
       range: z.string().describe('A1 notation range to clear (e.g., "A1:B10" or "Sheet1!A1:B10").'),
     }),
     execute: async (args, { log }) => {

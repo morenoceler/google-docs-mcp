@@ -1,7 +1,6 @@
 import type { FastMCP } from 'fastmcp';
 import { register as listGoogleDocs } from './listGoogleDocs.js';
 import { register as searchGoogleDocs } from './searchGoogleDocs.js';
-import { register as getRecentGoogleDocs } from './getRecentGoogleDocs.js';
 import { register as getDocumentInfo } from './getDocumentInfo.js';
 import { register as createFolder } from './createFolder.js';
 import { register as listFolderContents } from './listFolderContents.js';
@@ -16,7 +15,6 @@ import { register as createFromTemplate } from './createFromTemplate.js';
 export function registerDriveTools(server: FastMCP) {
   listGoogleDocs(server);
   searchGoogleDocs(server);
-  getRecentGoogleDocs(server);
   getDocumentInfo(server);
   createFolder(server);
   listFolderContents(server);

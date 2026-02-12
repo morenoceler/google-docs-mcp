@@ -8,7 +8,7 @@ import { DocumentIdParameter } from '../../../types.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'deleteComment',
-    description: 'Deletes a comment from the document.',
+    description: 'Permanently deletes a comment and all its replies from the document.',
     parameters: DocumentIdParameter.extend({
       commentId: z.string().describe('The ID of the comment to delete'),
     }),

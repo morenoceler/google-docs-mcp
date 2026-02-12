@@ -30,7 +30,7 @@ Before setting up VS Code integration, make sure you have:
 {
   "google-docs-drive": {
     "command": "node",
-    "args": ["${workspaceFolder}/dist/server.js"],
+    "args": ["${workspaceFolder}/dist/index.js"],
     "env": {
       "NODE_ENV": "production"
     }
@@ -89,7 +89,7 @@ Once configured, you can use the MCP server with AI assistants in VS Code:
 1. **Re-authorize** - Delete `token.json` and run the server manually once:
    ```bash
    cd /path/to/your/google-docs-mcp
-   node dist/server.js
+   node dist/index.js
    ```
 2. **Follow the authorization flow** again
 3. **Restart VS Code** after successful authorization

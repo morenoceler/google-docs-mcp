@@ -6,8 +6,8 @@ import { getDriveClient, getDocsClient } from '../../clients.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'createFromTemplate',
-    description: 'Creates a new Google Document from an existing document template.',
+    name: 'createDocumentFromTemplate',
+    description: 'Creates a new document by copying an existing template and optionally replacing placeholder text. Provide key-value pairs in the replacements parameter to substitute template variables.',
     parameters: z.object({
       templateId: z.string().describe('ID of the template document to copy from.'),
       newTitle: z.string().min(1).describe('Title for the new document.'),

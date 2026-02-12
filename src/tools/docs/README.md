@@ -18,39 +18,34 @@ docs/
 
 | Tool | Description |
 |------|-------------|
-| `readGoogleDoc` | Reads the content of a Google Document, optionally returning structured data |
-| `listDocumentTabs` | Lists all tabs in a Google Document, including hierarchy, IDs, and structure |
-| `appendToGoogleDoc` | Appends text to the end of a Google Document or tab |
-| `insertText` | Inserts text at a specific index within the document body or a specific tab |
-| `deleteRange` | Deletes content within a specified range from the document or a specific tab |
+| `readDocument` | Reads document content as plain text, markdown, or JSON |
+| `listTabs` | Lists all tabs in a document with their IDs and hierarchy |
+| `appendText` | Appends plain text to the end of a document |
+| `insertText` | Inserts text at a specific character index |
+| `deleteRange` | Deletes content within a character range |
 
 ## Structure
 
 | Tool | Description |
 |------|-------------|
-| `insertTable` | Inserts a new table with specified dimensions at a given index |
-| `editTableCell` | Edits the content and/or style of a specific table cell (not yet implemented) |
-| `insertPageBreak` | Inserts a page break at the specified index |
-| `insertImageFromUrl` | Inserts an inline image from a publicly accessible URL |
-| `insertLocalImage` | Uploads a local image to Drive and inserts it into the document |
-| `fixListFormatting` | Experimental: detects and converts text that looks like lists into proper formatted lists |
-| `findElement` | Finds elements based on various criteria (not yet implemented) |
+| `insertTable` | Inserts an empty table at a character index |
+| `insertPageBreak` | Inserts a page break at a character index |
+| `insertImage` | Inserts an image from a URL or local file path |
 
 ## [Formatting](./formatting/)
 
 | Tool | Description |
 |------|-------------|
 | `applyTextStyle` | Applies character-level formatting (bold, color, font, etc.) to a range or found text |
-| `applyParagraphStyle` | Applies paragraph-level formatting (alignment, spacing, named styles) |
-| `formatMatchingText` | Finds specific text and applies character formatting to the matched instance |
+| `applyParagraphStyle` | Applies paragraph-level formatting (alignment, spacing, heading styles) |
 
 ## [Comments](./comments/)
 
 | Tool | Description |
 |------|-------------|
-| `listComments` | Lists all comments in a Google Document |
-| `getComment` | Gets a specific comment with its full thread of replies |
-| `addComment` | Adds a comment anchored to a specific text range |
-| `replyToComment` | Adds a reply to an existing comment |
+| `listComments` | Lists all comments with IDs, authors, status, and quoted text |
+| `getComment` | Gets a specific comment and its full reply thread |
+| `addComment` | Adds a comment at a specific text range |
+| `replyToComment` | Adds a reply to an existing comment thread |
 | `resolveComment` | Marks a comment as resolved |
-| `deleteComment` | Deletes a comment from the document |
+| `deleteComment` | Permanently deletes a comment and all its replies |

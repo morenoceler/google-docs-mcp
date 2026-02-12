@@ -8,10 +8,10 @@ import { DocumentIdParameter } from '../../../types.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'replyToComment',
-    description: 'Adds a reply to an existing comment.',
+    description: 'Adds a reply to an existing comment thread. Use listComments or getComment to find the comment ID.',
     parameters: DocumentIdParameter.extend({
       commentId: z.string().describe('The ID of the comment to reply to'),
-      replyText: z.string().min(1).describe('The content of the reply'),
+      content: z.string().min(1).describe('The text content of the reply.'),
     }),
     execute: async (args, { log }) => {
       log.info(`Adding reply to comment ${args.commentId} in doc ${args.documentId}`);
@@ -25,7 +25,7 @@ export function register(server: FastMCP) {
           commentId: args.commentId,
           fields: 'id,content,author,createdTime',
           requestBody: {
-            content: args.replyText,
+            content: args.content,
           },
         });
 

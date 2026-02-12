@@ -8,9 +8,9 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'writeSpreadsheet',
     description:
-      'Writes data to a specific range in a Google Spreadsheet. Overwrites existing data in the range.',
+      'Writes data to a range in a spreadsheet, overwriting existing values. Use appendRows to add data without overwriting.',
     parameters: z.object({
-      spreadsheetId: z.string().describe('The ID of the Google Spreadsheet (from the URL).'),
+      spreadsheetId: z.string().describe('The spreadsheet ID — the long string between /d/ and /edit in a Google Sheets URL.'),
       range: z.string().describe('A1 notation range to write to (e.g., "A1:B2" or "Sheet1!A1:B2").'),
       values: z
         .array(z.array(z.any()))

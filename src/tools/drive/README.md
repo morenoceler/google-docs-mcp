@@ -4,16 +4,15 @@ Tools for managing files and folders in Google Drive, including listing, searchi
 
 | Tool | Description |
 |------|-------------|
-| `listGoogleDocs` | Lists Google Documents from your Google Drive with optional filtering. |
-| `searchGoogleDocs` | Searches for Google Documents by name, content, or other criteria. |
-| `getRecentGoogleDocs` | Gets the most recently modified Google Documents. |
-| `getDocumentInfo` | Gets detailed information about a specific Google Document. |
-| `createFolder` | Creates a new folder in Google Drive. |
-| `listFolderContents` | Lists the contents of a specific folder in Google Drive. |
-| `getFolderInfo` | Gets detailed information about a specific folder in Google Drive. |
-| `moveFile` | Moves a file or folder to a different location in Google Drive. |
-| `copyFile` | Creates a copy of a Google Drive file or document. |
-| `renameFile` | Renames a file or folder in Google Drive. |
-| `deleteFile` | Permanently deletes a file or folder from Google Drive. |
-| `createDocument` | Creates a new Google Document. |
-| `createFromTemplate` | Creates a new Google Document from an existing document template. |
+| `listDocuments` | Lists Google Documents in your Drive, optionally filtered by name or content |
+| `searchDocuments` | Searches for documents by name, content, or both |
+| `getDocumentInfo` | Gets metadata about a document (owner, sharing, modification history) |
+| `createDocument` | Creates a new empty Google Document |
+| `createDocumentFromTemplate` | Creates a new document by copying a template with placeholder replacements |
+| `createFolder` | Creates a new folder in Google Drive |
+| `listFolderContents` | Lists files and subfolders within a Drive folder |
+| `getFolderInfo` | Gets metadata about a Drive folder |
+| `moveFile` | Moves a file or folder to a different Drive folder |
+| `copyFile` | Creates a copy of a file or document |
+| `renameFile` | Renames a file or folder |
+| `deleteFile` | Moves a file or folder to the trash, or permanently deletes it |

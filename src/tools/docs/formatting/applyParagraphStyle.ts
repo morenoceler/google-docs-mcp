@@ -12,7 +12,7 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'applyParagraphStyle',
     description:
-      'Applies paragraph-level formatting (alignment, spacing, named styles like Heading 1) to the paragraph(s) containing specific text, an index, or a range.',
+      'Applies paragraph-level formatting (alignment, spacing, heading styles) to paragraphs identified by a character range or by searching for text. Use namedStyleType to set heading levels (HEADING_1 through HEADING_6).',
     parameters: ApplyParagraphStyleToolParameters,
     execute: async (args: ApplyParagraphStyleToolArgs, { log }) => {
       const docs = await getDocsClient();

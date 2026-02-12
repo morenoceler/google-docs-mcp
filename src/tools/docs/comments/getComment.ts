@@ -8,7 +8,7 @@ import { DocumentIdParameter } from '../../../types.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'getComment',
-    description: 'Gets a specific comment with its full thread of replies.',
+    description: 'Gets a specific comment and its full reply thread. Use listComments first to find the comment ID.',
     parameters: DocumentIdParameter.extend({
       commentId: z.string().describe('The ID of the comment to retrieve'),
     }),
@@ -26,29 +26,20 @@ export function register(server: FastMCP) {
         });
 
         const comment = response.data;
-        const author = comment.author?.displayName || 'Unknown';
-        const date = comment.createdTime
-          ? new Date(comment.createdTime).toLocaleDateString()
-          : 'Unknown date';
-        const status = comment.resolved ? ' [RESOLVED]' : '';
-        const quotedText = comment.quotedFileContent?.value || 'No quoted text';
-        const anchor = quotedText !== 'No quoted text' ? `\nAnchored to: "${quotedText}"` : '';
-
-        let result = `**${author}** (${date})${status}${anchor}\n${comment.content}`;
-
-        // Add replies if any
-        if (comment.replies && comment.replies.length > 0) {
-          result += '\n\n**Replies:**';
-          comment.replies.forEach((reply: any, index: number) => {
-            const replyAuthor = reply.author?.displayName || 'Unknown';
-            const replyDate = reply.createdTime
-              ? new Date(reply.createdTime).toLocaleDateString()
-              : 'Unknown date';
-            result += `\n${index + 1}. **${replyAuthor}** (${replyDate})\n   ${reply.content}`;
-          });
-        }
-
-        return result;
+        return JSON.stringify({
+          id: comment.id,
+          author: comment.author?.displayName || null,
+          content: comment.content,
+          quotedText: comment.quotedFileContent?.value || null,
+          resolved: comment.resolved || false,
+          createdTime: comment.createdTime,
+          replies: (comment.replies || []).map((r: any) => ({
+            id: r.id,
+            author: r.author?.displayName || null,
+            content: r.content,
+            createdTime: r.createdTime,
+          })),
+        }, null, 2);
       } catch (error: any) {
         log.error(`Error getting comment: ${error.message || error}`);
         throw new UserError(`Failed to get comment: ${error.message || 'Unknown error'}`);

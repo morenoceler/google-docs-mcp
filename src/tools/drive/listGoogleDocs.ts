@@ -5,8 +5,8 @@ import { getDriveClient } from '../../clients.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'listGoogleDocs',
-    description: 'Lists Google Documents from your Google Drive with optional filtering.',
+    name: 'listDocuments',
+    description: 'Lists Google Documents in your Drive, optionally filtered by name or content. Use modifiedAfter to find recently changed documents.',
     parameters: z.object({
       maxResults: z
         .number()
@@ -22,6 +22,12 @@ export function register(server: FastMCP) {
         .optional()
         .default('modifiedTime')
         .describe('Sort order for results.'),
+      modifiedAfter: z
+        .string()
+        .optional()
+        .describe(
+          'Only return documents modified after this date (ISO 8601 format, e.g., "2024-01-01").'
+        ),
     }),
     execute: async (args, { log }) => {
       const drive = await getDriveClient();
@@ -35,6 +41,10 @@ export function register(server: FastMCP) {
         if (args.query) {
           queryString += ` and (name contains '${args.query}' or fullText contains '${args.query}')`;
         }
+        if (args.modifiedAfter) {
+          const cutoffDate = new Date(args.modifiedAfter).toISOString();
+          queryString += ` and modifiedTime > '${cutoffDate}'`;
+        }
 
         const response = await drive.files.list({
           q: queryString,
@@ -47,25 +57,14 @@ export function register(server: FastMCP) {
         });
 
         const files = response.data.files || [];
-
-        if (files.length === 0) {
-          return 'No Google Docs found matching your criteria.';
-        }
-
-        let result = `Found ${files.length} Google Document(s):\n\n`;
-        files.forEach((file, index) => {
-          const modifiedDate = file.modifiedTime
-            ? new Date(file.modifiedTime).toLocaleDateString()
-            : 'Unknown';
-          const owner = file.owners?.[0]?.displayName || 'Unknown';
-          result += `${index + 1}. **${file.name}**\n`;
-          result += `   ID: ${file.id}\n`;
-          result += `   Modified: ${modifiedDate}\n`;
-          result += `   Owner: ${owner}\n`;
-          result += `   Link: ${file.webViewLink}\n\n`;
-        });
-
-        return result;
+        const documents = files.map((file) => ({
+          id: file.id,
+          name: file.name,
+          modifiedTime: file.modifiedTime,
+          owner: file.owners?.[0]?.displayName || null,
+          url: file.webViewLink,
+        }));
+        return JSON.stringify({ documents }, null, 2);
       } catch (error: any) {
         log.error(`Error listing Google Docs: ${error.message || error}`);
         if (error.code === 403)

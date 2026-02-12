@@ -9,12 +9,8 @@ import { register as deleteRange } from './deleteRange.js';
 
 // Structure
 import { register as insertTable } from './insertTable.js';
-import { register as editTableCell } from './editTableCell.js';
 import { register as insertPageBreak } from './insertPageBreak.js';
-import { register as insertImageFromUrl } from './insertImageFromUrl.js';
-import { register as insertLocalImage } from './insertLocalImage.js';
-import { register as fixListFormatting } from './fixListFormatting.js';
-import { register as findElement } from './findElement.js';
+import { register as insertImage } from './insertImage.js';
 
 // Sub-domains
 import { registerCommentTools } from './comments/index.js';
@@ -30,12 +26,8 @@ export function registerDocsTools(server: FastMCP) {
 
   // Structure
   insertTable(server);
-  editTableCell(server);
   insertPageBreak(server);
-  insertImageFromUrl(server);
-  insertLocalImage(server);
-  fixListFormatting(server);
-  findElement(server);
+  insertImage(server);
 
   // Sub-domains
   registerFormattingTools(server);

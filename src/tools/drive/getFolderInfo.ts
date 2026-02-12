@@ -6,7 +6,7 @@ import { getDriveClient } from '../../clients.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'getFolderInfo',
-    description: 'Gets detailed information about a specific folder in Google Drive.',
+    description: 'Gets metadata about a Drive folder including its name, owner, sharing status, and parent folder.',
     parameters: z.object({
       folderId: z.string().describe('ID of the folder to get information about.'),
     }),
@@ -22,47 +22,25 @@ export function register(server: FastMCP) {
           supportsAllDrives: true,
         });
 
-        const folder = response.data;
+        const file = response.data;
 
-        if (folder.mimeType !== 'application/vnd.google-apps.folder') {
+        if (file.mimeType !== 'application/vnd.google-apps.folder') {
           throw new UserError('The specified ID does not belong to a folder.');
         }
 
-        const createdDate = folder.createdTime
-          ? new Date(folder.createdTime).toLocaleString()
-          : 'Unknown';
-        const modifiedDate = folder.modifiedTime
-          ? new Date(folder.modifiedTime).toLocaleString()
-          : 'Unknown';
-        const owner = folder.owners?.[0];
-        const lastModifier = folder.lastModifyingUser;
-
-        let result = `**Folder Information:**\n\n`;
-        result += `**Name:** ${folder.name}\n`;
-        result += `**ID:** ${folder.id}\n`;
-        result += `**Created:** ${createdDate}\n`;
-        result += `**Last Modified:** ${modifiedDate}\n`;
-
-        if (owner) {
-          result += `**Owner:** ${owner.displayName} (${owner.emailAddress})\n`;
-        }
-
-        if (lastModifier) {
-          result += `**Last Modified By:** ${lastModifier.displayName}\n`;
-        }
-
-        result += `**Shared:** ${folder.shared ? 'Yes' : 'No'}\n`;
-        result += `**View Link:** ${folder.webViewLink}\n`;
-
-        if (folder.description) {
-          result += `**Description:** ${folder.description}\n`;
-        }
-
-        if (folder.parents && folder.parents.length > 0) {
-          result += `**Parent Folder ID:** ${folder.parents[0]}\n`;
-        }
-
-        return result;
+        const info = {
+          id: file.id,
+          name: file.name,
+          createdTime: file.createdTime,
+          modifiedTime: file.modifiedTime,
+          owner: file.owners?.[0]?.displayName || null,
+          lastModifyingUser: file.lastModifyingUser?.displayName || null,
+          shared: file.shared || false,
+          url: file.webViewLink,
+          description: file.description || null,
+          parentFolderId: file.parents?.[0] || null,
+        };
+        return JSON.stringify(info, null, 2);
       } catch (error: any) {
         log.error(`Error getting folder info: ${error.message || error}`);
         if (error.code === 404) throw new UserError(`Folder not found (ID: ${args.folderId}).`);

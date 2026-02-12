@@ -4,13 +4,13 @@ import { z } from 'zod';
 import { getDocsClient } from '../../clients.js';
 import { DocumentIdParameter, MarkdownConversionError } from '../../types.js';
 import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
-import { convertMarkdownToRequests } from '../../markdownToGoogleDocs.js';
+import { insertMarkdown, formatInsertResult } from '../../markdown-transformer/index.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'appendMarkdownToGoogleDoc',
+    name: 'appendMarkdown',
     description:
-      'Appends markdown content to the end of a Google Document with full formatting. Supports headings, bold, italic, strikethrough, links, and lists.',
+      'Appends formatted content to the end of a document using markdown syntax. Supports headings, bold, italic, strikethrough, links, and bullet/numbered lists. Use this instead of appendText when you need formatting.',
     parameters: DocumentIdParameter.extend({
       markdown: z
         .string()
@@ -26,6 +26,13 @@ export function register(server: FastMCP) {
         .optional()
         .describe(
           'The ID of the specific tab to append to. If not specified, appends to the first tab.'
+        ),
+      firstHeadingAsTitle: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe(
+          'If true, the first H1 heading (# ...) in the markdown is styled as a Google Docs TITLE instead of Heading 1. Useful when the markdown represents a full document whose first line is the document title.'
         ),
     }),
     execute: async (args, { log }) => {
@@ -87,24 +94,15 @@ export function register(server: FastMCP) {
         }
 
         // 3. Convert and append markdown
-        const markdownRequests = convertMarkdownToRequests(
-          args.markdown,
+        const result = await insertMarkdown(docs, args.documentId, args.markdown, {
           startIndex,
-          args.tabId
-        );
-        log.info(
-          `Generated ${markdownRequests.length} requests from markdown`
-        );
+          tabId: args.tabId,
+          firstHeadingAsTitle: args.firstHeadingAsTitle,
+        });
 
-        await GDocsHelpers.executeBatchUpdateWithSplitting(
-          docs,
-          args.documentId,
-          markdownRequests,
-          log
-        );
-
-        log.info(`Successfully appended markdown`);
-        return `Successfully appended ${args.markdown.length} characters of markdown (${markdownRequests.length} operations).`;
+        const debugSummary = formatInsertResult(result);
+        log.info(debugSummary);
+        return `Successfully appended ${args.markdown.length} characters of markdown.\n\n${debugSummary}`;
       } catch (error: any) {
         log.error(`Error appending markdown: ${error.message}`);
         if (

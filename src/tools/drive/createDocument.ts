@@ -7,7 +7,7 @@ import { getDriveClient, getDocsClient } from '../../clients.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'createDocument',
-    description: 'Creates a new Google Document.',
+    description: 'Creates a new empty Google Document. Optionally places it in a specific folder and adds initial text content.',
     parameters: z.object({
       title: z.string().min(1).describe('Title for the new document.'),
       parentFolderId: z
@@ -39,7 +39,6 @@ export function register(server: FastMCP) {
         });
 
         const document = response.data;
-        let result = `Successfully created document "${document.name}" (ID: ${document.id})\nView Link: ${document.webViewLink}`;
 
         // Add initial content if provided
         if (args.initialContent) {
@@ -58,14 +57,16 @@ export function register(server: FastMCP) {
                 ],
               },
             });
-            result += `\n\nInitial content added to document.`;
           } catch (contentError: any) {
             log.warn(`Document created but failed to add initial content: ${contentError.message}`);
-            result += `\n\nDocument created but failed to add initial content. You can add content manually.`;
           }
         }
 
-        return result;
+        return JSON.stringify({
+          id: document.id,
+          name: document.name,
+          url: document.webViewLink,
+        }, null, 2);
       } catch (error: any) {
         log.error(`Error creating document: ${error.message || error}`);
         if (error.code === 404) throw new UserError('Parent folder not found. Check the folder ID.');

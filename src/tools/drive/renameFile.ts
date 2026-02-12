@@ -6,9 +6,9 @@ import { getDriveClient } from '../../clients.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'renameFile',
-    description: 'Renames a file or folder in Google Drive.',
+    description: 'Renames a file or folder in Google Drive. Returns the updated file info.',
     parameters: z.object({
-      fileId: z.string().describe('ID of the file or folder to rename.'),
+      fileId: z.string().describe('The file or folder ID from a Google Drive URL or a previous tool result.'),
       newName: z.string().min(1).describe('New name for the file or folder.'),
     }),
     execute: async (args, { log }) => {

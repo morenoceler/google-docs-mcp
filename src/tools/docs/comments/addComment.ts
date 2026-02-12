@@ -9,7 +9,7 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'addComment',
     description:
-      'Adds a comment anchored to a specific text range in the document. NOTE: Due to Google API limitations, comments created programmatically appear in the "All Comments" list but are not visibly anchored to text in the document UI (they show "original content deleted"). However, replies, resolve, and delete operations work on all comments including manually-created ones.',
+      'Adds a comment to the document at the specified text range. Use listComments to retrieve the comment ID after creation. Note: programmatically created comments appear in the comments panel but may not show as anchored highlights in the document UI.',
     parameters: DocumentIdParameter.extend({
       startIndex: z
         .number()
@@ -17,7 +17,7 @@ export function register(server: FastMCP) {
         .min(1)
         .describe('The starting index of the text range (inclusive, starts from 1).'),
       endIndex: z.number().int().min(1).describe('The ending index of the text range (exclusive).'),
-      commentText: z.string().min(1).describe('The content of the comment.'),
+      content: z.string().min(1).describe('The text content of the comment.'),
     }).refine((data) => data.endIndex > data.startIndex, {
       message: 'endIndex must be greater than startIndex',
       path: ['endIndex'],
@@ -64,7 +64,7 @@ export function register(server: FastMCP) {
           fileId: args.documentId,
           fields: 'id,content,quotedFileContent,author,createdTime,resolved',
           requestBody: {
-            content: args.commentText,
+            content: args.content,
             quotedFileContent: {
               value: quotedText,
               mimeType: 'text/html',

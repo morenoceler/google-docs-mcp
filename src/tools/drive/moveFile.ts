@@ -6,9 +6,9 @@ import { getDriveClient } from '../../clients.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'moveFile',
-    description: 'Moves a file or folder to a different location in Google Drive.',
+    description: 'Moves a file or folder to a different Drive folder. By default adds the new parent while keeping existing parents; set removeFromAllParents=true for a true move.',
     parameters: z.object({
-      fileId: z.string().describe('ID of the file or folder to move.'),
+      fileId: z.string().describe('The file or folder ID from a Google Drive URL or a previous tool result.'),
       newParentId: z.string().describe('ID of the destination folder. Use "root" for Drive root.'),
       removeFromAllParents: z
         .boolean()

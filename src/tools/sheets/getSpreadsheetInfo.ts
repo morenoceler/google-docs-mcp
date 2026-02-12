@@ -7,9 +7,9 @@ import * as SheetsHelpers from '../../googleSheetsApiHelpers.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'getSpreadsheetInfo',
-    description: 'Gets detailed information about a Google Spreadsheet including all sheets/tabs.',
+    description: 'Gets metadata about a spreadsheet including its title, URL, and a list of all sheets with their dimensions.',
     parameters: z.object({
-      spreadsheetId: z.string().describe('The ID of the Google Spreadsheet (from the URL).'),
+      spreadsheetId: z.string().describe('The spreadsheet ID — the long string between /d/ and /edit in a Google Sheets URL.'),
     }),
     execute: async (args, { log }) => {
       const sheets = await getSheetsClient();
@@ -18,25 +18,22 @@ export function register(server: FastMCP) {
       try {
         const metadata = await SheetsHelpers.getSpreadsheetMetadata(sheets, args.spreadsheetId);
 
-        let result = `**Spreadsheet Information:**\n\n`;
-        result += `**Title:** ${metadata.properties?.title || 'Untitled'}\n`;
-        result += `**ID:** ${metadata.spreadsheetId}\n`;
-        result += `**URL:** https://docs.google.com/spreadsheets/d/${metadata.spreadsheetId}\n\n`;
-
         const sheetList = metadata.sheets || [];
-        result += `**Sheets (${sheetList.length}):**\n`;
-        sheetList.forEach((sheet, index) => {
-          const props = sheet.properties;
-          result += `${index + 1}. **${props?.title || 'Untitled'}**\n`;
-          result += `   - Sheet ID: ${props?.sheetId}\n`;
-          result += `   - Grid: ${props?.gridProperties?.rowCount || 0} rows × ${props?.gridProperties?.columnCount || 0} columns\n`;
-          if (props?.hidden) {
-            result += `   - Status: Hidden\n`;
-          }
-          result += `\n`;
-        });
-
-        return result;
+        return JSON.stringify({
+          title: metadata.properties?.title || 'Untitled',
+          id: metadata.spreadsheetId,
+          url: `https://docs.google.com/spreadsheets/d/${metadata.spreadsheetId}`,
+          sheets: sheetList.map((sheet) => {
+            const props = sheet.properties;
+            return {
+              title: props?.title || 'Untitled',
+              sheetId: props?.sheetId,
+              rows: props?.gridProperties?.rowCount || 0,
+              columns: props?.gridProperties?.columnCount || 0,
+              hidden: props?.hidden || false,
+            };
+          }),
+        }, null, 2);
       } catch (error: any) {
         log.error(`Error getting spreadsheet info ${args.spreadsheetId}: ${error.message || error}`);
         if (error instanceof UserError) throw error;

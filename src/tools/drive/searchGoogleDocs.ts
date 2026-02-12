@@ -5,10 +5,10 @@ import { getDriveClient } from '../../clients.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'searchGoogleDocs',
-    description: 'Searches for Google Documents by name, content, or other criteria.',
+    name: 'searchDocuments',
+    description: 'Searches for documents by name, content, or both. Use listDocuments for browsing and this tool for targeted queries.',
     parameters: z.object({
-      searchQuery: z.string().min(1).describe('Search term to find in document names or content.'),
+      query: z.string().min(1).describe('Search term to find in document names or content.'),
       searchIn: z
         .enum(['name', 'content', 'both'])
         .optional()
@@ -31,18 +31,18 @@ export function register(server: FastMCP) {
     }),
     execute: async (args, { log }) => {
       const drive = await getDriveClient();
-      log.info(`Searching Google Docs for: "${args.searchQuery}" in ${args.searchIn}`);
+      log.info(`Searching Google Docs for: "${args.query}" in ${args.searchIn}`);
 
       try {
         let queryString = "mimeType='application/vnd.google-apps.document' and trashed=false";
 
         // Add search criteria
         if (args.searchIn === 'name') {
-          queryString += ` and name contains '${args.searchQuery}'`;
+          queryString += ` and name contains '${args.query}'`;
         } else if (args.searchIn === 'content') {
-          queryString += ` and fullText contains '${args.searchQuery}'`;
+          queryString += ` and fullText contains '${args.query}'`;
         } else {
-          queryString += ` and (name contains '${args.searchQuery}' or fullText contains '${args.searchQuery}')`;
+          queryString += ` and (name contains '${args.query}' or fullText contains '${args.query}')`;
         }
 
         // Add date filter if provided
@@ -60,25 +60,14 @@ export function register(server: FastMCP) {
         });
 
         const files = response.data.files || [];
-
-        if (files.length === 0) {
-          return `No Google Docs found containing "${args.searchQuery}".`;
-        }
-
-        let result = `Found ${files.length} document(s) matching "${args.searchQuery}":\n\n`;
-        files.forEach((file, index) => {
-          const modifiedDate = file.modifiedTime
-            ? new Date(file.modifiedTime).toLocaleDateString()
-            : 'Unknown';
-          const owner = file.owners?.[0]?.displayName || 'Unknown';
-          result += `${index + 1}. **${file.name}**\n`;
-          result += `   ID: ${file.id}\n`;
-          result += `   Modified: ${modifiedDate}\n`;
-          result += `   Owner: ${owner}\n`;
-          result += `   Link: ${file.webViewLink}\n\n`;
-        });
-
-        return result;
+        const documents = files.map((file) => ({
+          id: file.id,
+          name: file.name,
+          modifiedTime: file.modifiedTime,
+          owner: file.owners?.[0]?.displayName || null,
+          url: file.webViewLink,
+        }));
+        return JSON.stringify({ documents }, null, 2);
       } catch (error: any) {
         log.error(`Error searching Google Docs: ${error.message || error}`);
         if (error.code === 403)

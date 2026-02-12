@@ -3,6 +3,7 @@ import { google, docs_v1, drive_v3, sheets_v4 } from 'googleapis';
 import { UserError } from 'fastmcp';
 import { OAuth2Client } from 'google-auth-library';
 import { authorize } from './auth.js';
+import { logger } from './logger.js';
 
 let authClient: OAuth2Client | null = null;
 let googleDocs: docs_v1.Docs | null = null;
@@ -16,15 +17,15 @@ export async function initializeGoogleClient() {
   if (!authClient) {
     // Check authClient instead of googleDocs to allow re-attempt
     try {
-      console.error('Attempting to authorize Google API client...');
+      logger.info('Attempting to authorize Google API client...');
       const client = await authorize();
       authClient = client; // Assign client here
       googleDocs = google.docs({ version: 'v1', auth: authClient });
       googleDrive = google.drive({ version: 'v3', auth: authClient });
       googleSheets = google.sheets({ version: 'v4', auth: authClient });
-      console.error('Google API client authorized successfully.');
+      logger.info('Google API client authorized successfully.');
     } catch (error) {
-      console.error('FATAL: Failed to initialize Google API client:', error);
+      logger.error('FATAL: Failed to initialize Google API client:', error);
       authClient = null; // Reset on failure
       googleDocs = null;
       googleDrive = null;

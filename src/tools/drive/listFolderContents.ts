@@ -6,7 +6,7 @@ import { getDriveClient } from '../../clients.js';
 export function register(server: FastMCP) {
   server.addTool({
     name: 'listFolderContents',
-    description: 'Lists the contents of a specific folder in Google Drive.',
+    description: 'Lists files and subfolders within a Drive folder. Use folderId=\'root\' to browse the top-level of the Drive.',
     parameters: z.object({
       folderId: z
         .string()
@@ -58,53 +58,22 @@ export function register(server: FastMCP) {
         });
 
         const items = response.data.files || [];
-
-        if (items.length === 0) {
-          return "The folder is empty or you don't have permission to view its contents.";
-        }
-
-        let result = `Contents of folder (${items.length} item${items.length !== 1 ? 's' : ''}):\n\n`;
-
-        // Separate folders and files
-        const folders = items.filter(
-          (item) => item.mimeType === 'application/vnd.google-apps.folder'
-        );
-        const files = items.filter((item) => item.mimeType !== 'application/vnd.google-apps.folder');
-
-        // List folders first
-        if (folders.length > 0 && args.includeSubfolders) {
-          result += `**Folders (${folders.length}):**\n`;
-          folders.forEach((folder) => {
-            result += `📁 ${folder.name} (ID: ${folder.id})\n`;
-          });
-          result += '\n';
-        }
-
-        // Then list files
-        if (files.length > 0 && args.includeFiles) {
-          result += `**Files (${files.length}):\n`;
-          files.forEach((file) => {
-            const fileType =
-              file.mimeType === 'application/vnd.google-apps.document'
-                ? '📄'
-                : file.mimeType === 'application/vnd.google-apps.spreadsheet'
-                  ? '📊'
-                  : file.mimeType === 'application/vnd.google-apps.presentation'
-                    ? '📈'
-                    : '📎';
-            const modifiedDate = file.modifiedTime
-              ? new Date(file.modifiedTime).toLocaleDateString()
-              : 'Unknown';
-            const owner = file.owners?.[0]?.displayName || 'Unknown';
-
-            result += `${fileType} ${file.name}\n`;
-            result += `   ID: ${file.id}\n`;
-            result += `   Modified: ${modifiedDate} by ${owner}\n`;
-            result += `   Link: ${file.webViewLink}\n\n`;
-          });
-        }
-
-        return result;
+        const folders = items
+          .filter((f) => f.mimeType === 'application/vnd.google-apps.folder')
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            modifiedTime: f.modifiedTime,
+          }));
+        const files = items
+          .filter((f) => f.mimeType !== 'application/vnd.google-apps.folder')
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            mimeType: f.mimeType,
+            modifiedTime: f.modifiedTime,
+          }));
+        return JSON.stringify({ folders, files }, null, 2);
       } catch (error: any) {
         log.error(`Error listing folder contents: ${error.message || error}`);
         if (error.code === 404) throw new UserError('Folder not found. Check the folder ID.');

@@ -12,7 +12,7 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'applyTextStyle',
     description:
-      'Applies character-level formatting (bold, color, font, etc.) to a specific range or found text.',
+      'Applies character-level formatting (bold, italic, color, font, etc.) to text identified by a character range or by searching for a text string. This is the primary tool for styling text in a document.',
     parameters: ApplyTextStyleToolParameters,
     execute: async (args: ApplyTextStyleToolArgs, { log }) => {
       const docs = await getDocsClient();

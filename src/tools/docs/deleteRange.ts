@@ -10,20 +10,20 @@ export function register(server: FastMCP) {
   server.addTool({
     name: 'deleteRange',
     description:
-      'Deletes content within a specified range (start index inclusive, end index exclusive) from the document or a specific tab.',
+      'Deletes content within a character range [startIndex, endIndex) from a document. Use readDocument with format=\'json\' to determine index positions.',
     parameters: DocumentIdParameter.extend({
       startIndex: z
         .number()
         .int()
         .min(1)
         .describe(
-          'The starting index of the text range (inclusive, starts from 1).'
+          '1-based character index within the document body. The start of the range to delete (inclusive).'
         ),
       endIndex: z
         .number()
         .int()
         .min(1)
-        .describe('The ending index of the text range (exclusive).'),
+        .describe('1-based character index within the document body. The end of the range to delete (exclusive).'),
       tabId: z
         .string()
         .optional()

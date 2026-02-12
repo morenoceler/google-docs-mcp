@@ -65,6 +65,7 @@ Replaces entire document content with markdown-formatted content.
 - `documentId`: The document ID
 - `markdown`: The markdown content to apply
 - `preserveTitle` (optional): If true, preserves the first heading/title
+- `firstHeadingAsTitle` (optional, default: false): If true, the first `# H1` is styled as a Google Docs **Title** instead of Heading 1
 - `tabId` (optional): Target a specific tab
 
 **Example:**
@@ -92,6 +93,7 @@ Appends markdown content to the end of a document with full formatting.
 - `documentId`: The document ID
 - `markdown`: The markdown content to append
 - `addNewlineIfNeeded` (optional, default: true): Add spacing before appended content
+- `firstHeadingAsTitle` (optional, default: false): If true, the first `# H1` is styled as a Google Docs **Title** instead of Heading 1
 - `tabId` (optional): Target a specific tab
 
 ### Known Limitations for Markdown
@@ -110,7 +112,7 @@ Appends markdown content to the end of a document with full formatting.
 | `src/googleSheetsApiHelpers.ts` | A1 notation parsing, range operations                                                            |
 | `src/markdownParser.ts`         | Markdown-it configuration, markdown parsing utilities                                            |
 | `src/markdownToGoogleDocs.ts`   | Markdown-to-Google-Docs conversion logic                                                         |
-| `src/server.ts`                 | All 44 tool definitions with full parameter schemas                                              |
+| `src/index.ts`                  | Entry point, CLI handling, and MCP server startup                                                |
 
 ## See Also
 

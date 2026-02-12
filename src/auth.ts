@@ -1,34 +1,101 @@
 // src/auth.ts
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { JWT } from 'google-auth-library'; // ADDED: Import for Service Account client
+import { JWT } from 'google-auth-library';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import * as http from 'http';
 import { fileURLToPath } from 'url';
+import { logger } from './logger.js';
 
-// --- Calculate paths relative to this script file (ESM way) ---
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRootDir = path.resolve(__dirname, '..');
 
-const TOKEN_PATH = path.join(projectRootDir, 'token.json');
+/** Credentials file path (legacy dev workflow fallback). */
 const CREDENTIALS_PATH = path.join(projectRootDir, 'credentials.json');
-// --- End of path calculation ---
+
+/**
+ * Token storage directory following XDG Base Directory spec.
+ * Uses $XDG_CONFIG_HOME if set, otherwise ~/.config.
+ */
+function getConfigDir(): string {
+  const xdg = process.env.XDG_CONFIG_HOME;
+  const base = xdg || path.join(os.homedir(), '.config');
+  return path.join(base, 'google-docs-mcp');
+}
+
+function getTokenPath(): string {
+  return path.join(getConfigDir(), 'token.json');
+}
+
+// ---------------------------------------------------------------------------
+// Scopes
+// ---------------------------------------------------------------------------
 
 const SCOPES = [
   'https://www.googleapis.com/auth/documents',
-  'https://www.googleapis.com/auth/drive', // Full Drive access for listing, searching, and document discovery
-  'https://www.googleapis.com/auth/spreadsheets', // Google Sheets API access
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/spreadsheets',
 ];
 
-// --- NEW FUNCTION: Handles Service Account Authentication ---
-// This entire function is new. It is called only when the
-// SERVICE_ACCOUNT_PATH environment variable is set.
-// Supports domain-wide delegation via GOOGLE_IMPERSONATE_USER env var.
+// ---------------------------------------------------------------------------
+// Client secrets resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves OAuth client ID and secret.
+ *
+ * Priority:
+ *   1. GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET env vars (npx / production)
+ *   2. credentials.json in the project root (local dev fallback)
+ */
+async function loadClientSecrets(): Promise<{
+  client_id: string;
+  client_secret: string;
+}> {
+  // 1. Environment variables
+  const envId = process.env.GOOGLE_CLIENT_ID;
+  const envSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (envId && envSecret) {
+    return { client_id: envId, client_secret: envSecret };
+  }
+
+  // 2. credentials.json fallback
+  try {
+    const content = await fs.readFile(CREDENTIALS_PATH, 'utf8');
+    const keys = JSON.parse(content);
+    const key = keys.installed || keys.web;
+    if (!key) {
+      throw new Error('Could not find client secrets in credentials.json.');
+    }
+    return {
+      client_id: key.client_id,
+      client_secret: key.client_secret,
+    };
+  } catch (err: any) {
+    if (err.code === 'ENOENT') {
+      throw new Error(
+        'No OAuth credentials found. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET ' +
+          'environment variables, or place a credentials.json file in the project root.'
+      );
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Service account auth (unchanged)
+// ---------------------------------------------------------------------------
+
 async function authorizeWithServiceAccount(): Promise<JWT> {
-  const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH!; // We know this is set if we are in this function
-  const impersonateUser = process.env.GOOGLE_IMPERSONATE_USER; // Optional: email of user to impersonate
+  const serviceAccountPath = process.env.SERVICE_ACCOUNT_PATH!;
+  const impersonateUser = process.env.GOOGLE_IMPERSONATE_USER;
   try {
     const keyFileContent = await fs.readFile(serviceAccountPath, 'utf8');
     const serviceAccountKey = JSON.parse(keyFileContent);
@@ -37,67 +104,71 @@ async function authorizeWithServiceAccount(): Promise<JWT> {
       email: serviceAccountKey.client_email,
       key: serviceAccountKey.private_key,
       scopes: SCOPES,
-      subject: impersonateUser, // Enables domain-wide delegation when set
+      subject: impersonateUser,
     });
     await auth.authorize();
     if (impersonateUser) {
-      console.error(`Service Account authentication successful, impersonating: ${impersonateUser}`);
+      logger.info(
+        `Service Account authentication successful, impersonating: ${impersonateUser}`
+      );
     } else {
-      console.error('Service Account authentication successful!');
+      logger.info('Service Account authentication successful!');
     }
     return auth;
   } catch (error: any) {
     if (error.code === 'ENOENT') {
-      console.error(`FATAL: Service account key file not found at path: ${serviceAccountPath}`);
+      logger.error(`FATAL: Service account key file not found at path: ${serviceAccountPath}`);
       throw new Error(
-        `Service account key file not found. Please check the path in SERVICE_ACCOUNT_PATH.`
+        'Service account key file not found. Please check the path in SERVICE_ACCOUNT_PATH.'
       );
     }
-    console.error('FATAL: Error loading or authorizing the service account key:', error.message);
+    logger.error('FATAL: Error loading or authorizing the service account key:', error.message);
     throw new Error(
       'Failed to authorize using the service account. Ensure the key file is valid and the path is correct.'
     );
   }
 }
-// --- END OF NEW FUNCTION---
+
+// ---------------------------------------------------------------------------
+// Token persistence (XDG path)
+// ---------------------------------------------------------------------------
 
 async function loadSavedCredentialsIfExist(): Promise<OAuth2Client | null> {
   try {
-    const content = await fs.readFile(TOKEN_PATH);
-    const credentials = JSON.parse(content.toString());
-    const { client_secret, client_id, redirect_uris } = await loadClientSecrets();
-    const client = new google.auth.OAuth2(client_id, client_secret, redirect_uris?.[0]);
+    const tokenPath = getTokenPath();
+    const content = await fs.readFile(tokenPath, 'utf8');
+    const credentials = JSON.parse(content);
+    const { client_secret, client_id } = await loadClientSecrets();
+    const client = new google.auth.OAuth2(client_id, client_secret);
     client.setCredentials(credentials);
     return client;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
 
-async function loadClientSecrets() {
-  const content = await fs.readFile(CREDENTIALS_PATH);
-  const keys = JSON.parse(content.toString());
-  const key = keys.installed || keys.web;
-  if (!key) throw new Error('Could not find client secrets in credentials.json.');
-  return {
-    client_id: key.client_id,
-    client_secret: key.client_secret,
-    redirect_uris: key.redirect_uris || ['http://localhost:3000/'], // Default for web clients
-    client_type: keys.web ? 'web' : 'installed',
-  };
-}
-
 async function saveCredentials(client: OAuth2Client): Promise<void> {
   const { client_secret, client_id } = await loadClientSecrets();
-  const payload = JSON.stringify({
-    type: 'authorized_user',
-    client_id: client_id,
-    client_secret: client_secret,
-    refresh_token: client.credentials.refresh_token,
-  });
-  await fs.writeFile(TOKEN_PATH, payload);
-  console.error('Token stored to', TOKEN_PATH);
+  const configDir = getConfigDir();
+  await fs.mkdir(configDir, { recursive: true });
+  const tokenPath = getTokenPath();
+  const payload = JSON.stringify(
+    {
+      type: 'authorized_user',
+      client_id,
+      client_secret,
+      refresh_token: client.credentials.refresh_token,
+    },
+    null,
+    2
+  );
+  await fs.writeFile(tokenPath, payload);
+  logger.info('Token stored to', tokenPath);
 }
+
+// ---------------------------------------------------------------------------
+// Interactive OAuth browser flow
+// ---------------------------------------------------------------------------
 
 async function authenticate(): Promise<OAuth2Client> {
   const { client_secret, client_id } = await loadClientSecrets();
@@ -115,7 +186,7 @@ async function authenticate(): Promise<OAuth2Client> {
     scope: SCOPES.join(' '),
   });
 
-  console.error('Authorize this app by visiting this url:', authorizeUrl);
+  logger.info('Authorize this app by visiting this url:', authorizeUrl);
 
   // Wait for the OAuth callback
   const code = await new Promise<string>((resolve, reject) => {
@@ -146,32 +217,44 @@ async function authenticate(): Promise<OAuth2Client> {
   if (tokens.refresh_token) {
     await saveCredentials(oAuth2Client);
   } else {
-    console.error('Did not receive refresh token. Token might expire.');
+    logger.warn('Did not receive refresh token. Token might expire.');
   }
-  console.error('Authentication successful!');
+  logger.info('Authentication successful!');
   return oAuth2Client;
 }
 
-// --- MODIFIED: The Main Exported Function ---
-// This function now acts as a router. It checks for the environment
-// variable and decides which authentication method to use.
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Main authorization entry point used by the server at startup.
+ *
+ * Resolution order:
+ *   1. SERVICE_ACCOUNT_PATH env var -> service account JWT
+ *   2. Saved token in ~/.config/google-docs-mcp/token.json -> OAuth2Client
+ *   3. Interactive browser OAuth flow -> OAuth2Client (saves token for next time)
+ */
 export async function authorize(): Promise<OAuth2Client | JWT> {
-  // Check if the Service Account environment variable is set.
   if (process.env.SERVICE_ACCOUNT_PATH) {
-    console.error('Service account path detected. Attempting service account authentication...');
+    logger.info('Service account path detected. Attempting service account authentication...');
     return authorizeWithServiceAccount();
-  } else {
-    // If not, execute the original OAuth 2.0 flow exactly as it was.
-    console.error('No service account path detected. Falling back to standard OAuth 2.0 flow...');
-    let client = await loadSavedCredentialsIfExist();
-    if (client) {
-      // Optional: Add token refresh logic here if needed, though library often handles it.
-      console.error('Using saved credentials.');
-      return client;
-    }
-    console.error('Starting authentication flow...');
-    client = await authenticate();
+  }
+
+  logger.info('Attempting OAuth 2.0 authentication...');
+  const client = await loadSavedCredentialsIfExist();
+  if (client) {
+    logger.info('Using saved credentials.');
     return client;
   }
+  logger.info('No saved token found. Starting interactive authentication flow...');
+  return authenticate();
 }
-// --- END OF MODIFIED: The Main Exported Function ---
+
+/**
+ * Forces the interactive OAuth browser flow, ignoring any saved token.
+ * Used by the `auth` CLI subcommand to let users (re-)authorize.
+ */
+export async function runAuthFlow(): Promise<void> {
+  await authenticate();
+}

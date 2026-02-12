@@ -6,10 +6,10 @@ import * as SheetsHelpers from '../../googleSheetsApiHelpers.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'appendSpreadsheetRows',
-    description: 'Appends rows of data to the end of a sheet in a Google Spreadsheet.',
+    name: 'appendRows',
+    description: 'Appends rows to the end of a sheet. Data is added after the last row with content in the specified range.',
     parameters: z.object({
-      spreadsheetId: z.string().describe('The ID of the Google Spreadsheet (from the URL).'),
+      spreadsheetId: z.string().describe('The spreadsheet ID — the long string between /d/ and /edit in a Google Sheets URL.'),
       range: z
         .string()
         .describe(

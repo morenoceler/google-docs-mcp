@@ -4,13 +4,13 @@ import { z } from 'zod';
 import { getDocsClient } from '../../clients.js';
 import { DocumentIdParameter, NotImplementedError } from '../../types.js';
 import * as GDocsHelpers from '../../googleDocsApiHelpers.js';
-import { convertDocsJsonToMarkdown } from '../../docsToMarkdown.js';
+import { docsJsonToMarkdown } from '../../markdown-transformer/index.js';
 
 export function register(server: FastMCP) {
   server.addTool({
-    name: 'readGoogleDoc',
+    name: 'readDocument',
     description:
-      'Reads the content of a specific Google Document, optionally returning structured data.',
+      'Reads the content of a Google Document. Returns plain text by default. Use format=\'markdown\' to get formatted content suitable for editing and re-uploading with replaceDocumentWithMarkdown, or format=\'json\' for the raw document structure.',
     parameters: DocumentIdParameter.extend({
       format: z
         .enum(['text', 'json', 'markdown'])
@@ -90,7 +90,7 @@ export function register(server: FastMCP) {
         }
 
         if (args.format === 'markdown') {
-          const markdownContent = convertDocsJsonToMarkdown(contentSource);
+          const markdownContent = docsJsonToMarkdown(contentSource);
           const totalLength = markdownContent.length;
           log.info(`Generated markdown: ${totalLength} characters`);
 
