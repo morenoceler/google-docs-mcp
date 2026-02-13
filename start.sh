@@ -12,4 +12,4 @@ if [ -n "$GOOGLE_TOKEN_B64" ]; then
 fi
 
 # Start the MCP proxy wrapping the stdio server
-exec mcp-proxy --port ${PORT:-8080} -- node dist/server.js
+exec mcp-proxy --port ${PORT:-8080} -- node dist/index.js
